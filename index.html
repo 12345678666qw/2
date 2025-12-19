@@ -3,311 +3,667 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>幸运大转盘抽奖</title>
+    <title>转盘抽奖</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Microsoft YaHei', sans-serif; }
-        body { background: white; color: #333; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 20px; overflow-x: hidden; }
-        .container { max-width: 1200px; width: 100%; display: flex; flex-direction: column; align-items: center; }
-        header { text-align: center; margin-bottom: 30px; width: 100%; }
-        h1 { font-size: 2.8rem; margin-bottom: 10px; color: #e74c3c; letter-spacing: 2px; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1); }
-        .subtitle { font-size: 1.3rem; margin-bottom: 20px; color: #7f8c8d; }
-        .content { display: flex; flex-wrap: wrap; justify-content: center; gap: 50px; width: 100%; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
         
-        .wheel-container { position: relative; width: 420px; height: 420px; display: flex; justify-content: center; align-items: center; }
-        .wheel { width: 100%; height: 100%; border-radius: 50%; background: white; position: relative; transition: transform 5s cubic-bezier(0.17, 0.67, 0.21, 0.99); box-shadow: 0 0 25px rgba(0, 0, 0, 0.15), inset 0 0 15px rgba(0, 0, 0, 0.1); overflow: hidden; border: 10px solid #f1c40f; }
-        .wheel::before { content: ''; position: absolute; top: 15px; left: 15px; right: 15px; bottom: 15px; border-radius: 50%; border: 2px solid rgba(0, 0, 0, 0.1); pointer-events: none; }
-        .pointer { position: absolute; top: -25px; left: 50%; transform: translateX(-50%); width: 45px; height: 65px; background: linear-gradient(to bottom, #e74c3c, #c0392b); clip-path: polygon(50% 0%, 0% 100%, 100% 100%); z-index: 10; filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.3)); border-radius: 5px 5px 0 0; }
-        .pointer::after { content: ''; position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: 20px; height: 20px; background: #f1c40f; border-radius: 50%; box-shadow: 0 0 10px #f1c40f; }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #121212;
+            font-family: 'Microsoft YaHei', sans-serif;
+            overflow: hidden;
+        }
         
-        .wheel-section { position: absolute; width: 50%; height: 50%; transform-origin: bottom right; left: 0; top: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: bold; color: #333; border-right: 2px solid rgba(0, 0, 0, 0.1); }
-        .wheel-section:nth-child(1) { transform: rotate(0deg); background-color: #ff9ff3; }
-        .wheel-section:nth-child(2) { transform: rotate(60deg); background-color: #feca57; }
-        .wheel-section:nth-child(3) { transform: rotate(120deg); background-color: #ff6b6b; }
-        .wheel-section:nth-child(4) { transform: rotate(180deg); background-color: #48dbfb; }
-        .wheel-section:nth-child(5) { transform: rotate(240deg); background-color: #1dd1a1; }
-        .wheel-section:nth-child(6) { transform: rotate(300deg); background-color: #ff9ff3; }
+        .wheel-container {
+            position: relative;
+            width: 400px;
+            height: 400px;
+            margin: 0 auto;
+        }
         
-        .section-content { transform: rotate(30deg); font-size: 19px; width: 80px; text-align: center; font-weight: bold; padding: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.8); box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); }
+        canvas {
+            display: block;
+            margin: 0 auto;
+            border-radius: 50%;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+            background: #000;
+            width: 100%;
+            height: 100%;
+        }
         
-        .controls { display: flex; flex-direction: column; align-items: center; gap: 25px; margin-top: 30px; }
-        .spin-btn { background: linear-gradient(to bottom, #e74c3c, #c0392b); color: white; border: none; padding: 18px 50px; font-size: 1.4rem; border-radius: 50px; cursor: pointer; transition: all 0.3s; box-shadow: 0 6px 15px rgba(231, 76, 60, 0.3); text-transform: uppercase; letter-spacing: 1px; font-weight: bold; position: relative; overflow: hidden; }
-        .spin-btn:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(231, 76, 60, 0.4); }
-        .spin-btn:disabled { background: #bdc3c7; cursor: not-allowed; transform: none; box-shadow: none; }
+        .pointer {
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 25px solid transparent;
+            border-right: 25px solid transparent;
+            border-top: 50px solid #FF0000;
+            z-index: 10;
+            filter: drop-shadow(0 5px 10px rgba(255, 0, 0, 0.5));
+        }
         
-        .prizes-info { background: white; border-radius: 20px; padding: 25px; width: 320px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); border: 1px solid #ecf0f1; }
-        .prizes-info h2 { text-align: center; margin-bottom: 20px; font-size: 1.8rem; color: #e74c3c; text-shadow: 0 0 10px rgba(231, 76, 60, 0.2); }
-        .prize-list { list-style-type: none; }
-        .prize-item { padding: 12px 0; border-bottom: 1px solid #ecf0f1; display: flex; justify-content: space-between; font-size: 1.1rem; transition: all 0.3s; }
-        .prize-item:hover { background: #f8f9fa; padding-left: 10px; border-radius: 5px; }
-        .prize-item:last-child { border-bottom: none; }
+        .pointer::after {
+            content: '';
+            position: absolute;
+            top: -15px;
+            left: -15px;
+            width: 30px;
+            height: 30px;
+            background: #FF0000;
+            border-radius: 50%;
+        }
         
-        .video-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.95); z-index: 100; display: none; justify-content: center; align-items: center; flex-direction: column; }
-        .video-player { width: 90%; height: 80%; object-fit: contain; border-radius: 15px; box-shadow: 0 0 30px rgba(255, 255, 255, 0.1); }
-        .video-player::-webkit-media-controls-timeline { display: none; }
-        .video-player::-webkit-media-controls-volume-slider { display: none; }
-        .video-player::-webkit-media-controls-fullscreen-button { display: none; }
-        
-        .close-video { position: absolute; top: 30px; right: 30px; background: rgba(0, 0, 0, 0.7); color: white; border: 2px solid white; width: 50px; height: 50px; border-radius: 50%; font-size: 1.8rem; cursor: pointer; z-index: 101; display: flex; justify-content: center; align-items: center; transition: all 0.3s; }
-        .close-video:hover { background: rgba(255, 0, 0, 0.7); transform: rotate(90deg); }
-        
-        .loading { text-align: center; margin-top: 20px; font-size: 1.2rem; background: #f8f9fa; padding: 10px 20px; border-radius: 10px; color: #7f8c8d; }
-        .result { margin-top: 20px; font-size: 1.8rem; text-align: center; min-height: 70px; display: flex; align-items: center; justify-content: center; background: #f8f9fa; padding: 15px 30px; border-radius: 15px; width: 100%; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05); }
-        .result-prize { font-weight: bold; color: #e74c3c; font-size: 2rem; }
-        
-        .replay-prompt { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.8); color: white; padding: 15px 25px; border-radius: 10px; display: none; z-index: 102; text-align: center; backdrop-filter: blur(5px); }
-        .replay-prompt p { margin-bottom: 15px; font-size: 1.2rem; }
-        .replay-buttons { display: flex; gap: 15px; justify-content: center; }
-        .replay-btn { padding: 8px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; transition: all 0.3s; }
-        .replay-yes { background: #e74c3c; color: white; }
-        .replay-no { background: #7f8c8d; color: white; }
-        .replay-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2); }
-        
-        .video-container.landscape { transform: rotate(90deg); transform-origin: center; width: 100vh; height: 100vw; top: 50%; left: 50%; margin-top: -50vw; margin-left: -50vh; }
-        
-        /* 想屁吃特效样式 */
-        .xiang-pi-chi {
-            position: fixed;
+        .spin-btn {
+            position: absolute;
             top: 50%;
             left: 50%;
-            transform: translate(-50%, -50%) scale(0);
-            font-size: 8rem;
+            transform: translate(-50%, -50%);
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #FF6B6B, #FF8E53);
+            border: none;
+            color: white;
+            font-size: 20px;
             font-weight: bold;
-            color: #e74c3c;
-            text-shadow: 0 0 20px rgba(255, 0, 0, 0.7);
+            cursor: pointer;
+            z-index: 5;
+            box-shadow: 0 0 30px rgba(255, 107, 107, 0.8);
+            transition: all 0.3s;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
+        }
+        
+        .spin-btn:hover:not(:disabled) {
+            transform: translate(-50%, -50%) scale(1.1);
+            box-shadow: 0 0 40px rgba(255, 107, 107, 1);
+        }
+        
+        .spin-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        #result {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 500px;
+            padding: 25px;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 15px;
+            font-size: 28px;
+            font-weight: bold;
+            color: white;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            opacity: 0;
+            transition: opacity 0.5s, transform 0.5s;
+            transform: translateX(-50%) translateY(50px);
+        }
+        
+        #result.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+        
+        @media (max-width: 500px) {
+            .wheel-container {
+                width: 300px;
+                height: 300px;
+            }
+            
+            #result {
+                font-size: 22px;
+                padding: 20px;
+            }
+            
+            .spin-btn {
+                width: 80px;
+                height: 80px;
+                font-size: 18px;
+            }
+        }
+        
+        @keyframes sparkle {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+        
+        .sparkle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: white;
+            border-radius: 50%;
+            box-shadow: 0 0 10px white;
+            animation: sparkle 2s infinite;
+        }
+        
+        /* 自定义确认框样式 - 增强视觉体验 */
+        .custom-confirm {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.3);
             z-index: 1000;
-            animation: xiang-pi-chi-animation 3s ease-out forwards;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.3s;
             pointer-events: none;
         }
         
-        @keyframes xiang-pi-chi-animation {
-            0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
-            20% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
-            30% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-            70% { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; }
-            100% { transform: translate(-50%, -50%) scale(1) rotate(360deg); opacity: 0; }
+        .custom-confirm.active {
+            opacity: 1;
+            pointer-events: all;
         }
         
-        @media (max-width: 768px) {
-            .content { flex-direction: column; align-items: center; gap: 30px; }
-            .wheel-container { width: 320px; height: 320px; }
-            .section-content { font-size: 16px; width: 70px; }
-            h1 { font-size: 2.2rem; }
-            .prizes-info { width: 320px; }
-            .xiang-pi-chi { font-size: 5rem; }
+        .confirm-box {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.7);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            transform: translateY(20px);
+            transition: transform 0.3s;
+            position: absolute;
+        }
+        
+        .custom-confirm.active .confirm-box {
+            transform: translateY(0);
+        }
+        
+        .confirm-title {
+            font-size: 28px;
+            color: #FFD700;
+            margin-bottom: 15px;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+        }
+        
+        .confirm-message {
+            font-size: 20px;
+            color: #fff;
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+        
+        .confirm-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+        
+        .confirm-btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 50px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            min-width: 120px;
+        }
+        
+        .confirm-yes {
+            background: linear-gradient(45deg, #4CAF50, #8BC34A);
+            color: white;
+            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+        }
+        
+        .confirm-yes:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(76, 175, 80, 0.6);
+        }
+        
+        .confirm-no {
+            background: linear-gradient(45deg, #FF5252, #FF8A80);
+            color: white;
+            box-shadow: 0 5px 15px rgba(255, 82, 82, 0.4);
+        }
+        
+        .confirm-no:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(255, 82, 82, 0.6);
+        }
+        
+        /* 确认框堆叠容器 */
+        .confirm-stack {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        
+        /* 堆叠确认框样式 */
+        .stacked-confirm {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.7);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            opacity: 0;
+            transition: all 0.4s ease-out;
+            pointer-events: all;
+        }
+        
+        .stacked-confirm.active {
+            opacity: 1;
+        }
+        
+        /* 为每个堆叠的确认框设置不同的偏移 */
+        .stacked-confirm:nth-child(1) { z-index: 1003; }
+        .stacked-confirm:nth-child(2) { 
+            z-index: 1002;
+            transform: translate(-50%, -50%) translateX(15px) translateY(15px);
+        }
+        .stacked-confirm:nth-child(3) { 
+            z-index: 1001;
+            transform: translate(-50%, -50%) translateX(30px) translateY(30px);
+        }
+        .stacked-confirm:nth-child(4) { 
+            z-index: 1000;
+            transform: translate(-50%, -50%) translateX(45px) translateY(45px);
+        }
+        .stacked-confirm:nth-child(5) { 
+            z-index: 999;
+            transform: translate(-50%, -50%) translateX(60px) translateY(60px);
+        }
+        
+        /* 历史确认框样式 - 降低透明度 */
+        .stacked-confirm.history {
+            opacity: 0.4;
+            pointer-events: none;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>幸运大转盘抽奖</h1>
-            <p class="subtitle">转动转盘，赢取惊喜大奖！</p>
-        </header>
-        
-        <div class="content">
-            <div class="wheel-container">
-                <div class="pointer"></div>
-                <div class="wheel" id="wheel">
-                    <div class="wheel-section"><div class="section-content">状元</div></div>
-                    <div class="wheel-section"><div class="section-content">参与奖1</div></div>
-                    <div class="wheel-section"><div class="section-content">参与奖2</div></div>
-                    <div class="wheel-section"><div class="section-content">参与奖3</div></div>
-                    <div class="wheel-section"><div class="section-content">参与奖4</div></div>
-                    <div class="wheel-section"><div class="section-content">参与奖5</div></div>
-                </div>
-            </div>
-            
-            <div class="prizes-info">
-                <h2>奖项设置</h2>
-                <ul class="prize-list">
-                    <li class="prize-item"><span>状元</span><span>特等奖</span></li>
-                    <li class="prize-item"><span>参与奖1</span><span>一等奖</span></li>
-                    <li class="prize-item"><span>参与奖2</span><span>二等奖</span></li>
-                    <li class="prize-item"><span>参与奖3</span><span>三等奖</span></li>
-                    <li class="prize-item"><span>参与奖4</span><span>四等奖</span></li>
-                    <li class="prize-item"><span>参与奖5</span><span>五等奖</span></li>
-                </ul>
-            </div>
-        </div>
-        
-        <div class="controls">
-            <button class="spin-btn" id="spinBtn">开始抽奖</button>
-            <div class="loading" id="loading">视频加载中，请稍候...</div>
-            <div class="result" id="result"></div>
-        </div>
+    <div class="wheel-container">
+        <canvas id="wheelCanvas" width="400" height="400"></canvas>
+        <div class="pointer"></div>
+        <button class="spin-btn" id="spinBtn">GO</button>
     </div>
     
-    <div class="video-container" id="videoContainer">
-        <button class="close-video" id="closeVideo">×</button>
-        <video class="video-player" id="videoPlayer"></video>
-        <div class="replay-prompt" id="replayPrompt">
-            <p>视频播放完毕，是否重新播放？</p>
-            <div class="replay-buttons">
-                <button class="replay-btn replay-yes" id="replayYes">是</button>
-                <button class="replay-btn replay-no" id="replayNo">否</button>
-            </div>
-        </div>
-    </div>
+    <div id="result"></div>
+    
+    <!-- 确认框堆叠容器 -->
+    <div class="confirm-stack" id="confirmStack"></div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const wheel = document.getElementById('wheel');
-            const spinBtn = document.getElementById('spinBtn');
-            const result = document.getElementById('result');
-            const loading = document.getElementById('loading');
-            const videoContainer = document.getElementById('videoContainer');
-            const videoPlayer = document.getElementById('videoPlayer');
-            const closeVideo = document.getElementById('closeVideo');
-            const replayPrompt = document.getElementById('replayPrompt');
-            const replayYes = document.getElementById('replayYes');
-            const replayNo = document.getElementById('replayNo');
-            
-            let currentPrize = null;
-            const FIXED_ROTATION_COUNT = 5;
-            
-            const prizes = [
-                { name: "状元", video: "https://raw.githubusercontent.com/12345678666qw/2/refs/heads/main/5ef9303111a910685bad08f415520d89.mp4" },
-                { name: "参与奖1", video: "https://raw.githubusercontent.com/12345678666qw/2/refs/heads/main/250a271e1aa8a12b55c85e46e046f68c.mp4" },
-                { name: "参与奖2", video: "https://raw.githubusercontent.com/12345678666qw/2/refs/heads/main/a4aed726f1ea371cd79555669ddbd083.mp4" },
-                { name: "参与奖3", video: "https://raw.githubusercontent.com/12345678666qw/2/refs/heads/main/a41fb48c8f54cc4cfe1db71850d29122.mp4" },
-                { name: "参与奖4", video: "https://raw.githubusercontent.com/12345678666qw/2/refs/heads/main/653046b2c1fc849e69b6205d3164a25e.mp4" },
-                { name: "参与奖5", video: "https://raw.githubusercontent.com/12345678666qw/2/refs/heads/main/2c0b601932a2a57f80c0182c770c0fcc.mp4" }
-            ];
-            
-            // 视频预加载
-            let videosLoaded = 0;
-            const totalVideos = prizes.length;
-            const videoBuffers = {};
-            
-            spinBtn.disabled = true;
-            
-            prizes.forEach((prize, index) => {
-                const video = document.createElement('video');
-                video.src = prize.video;
-                video.preload = 'auto';
+        class SimpleLotteryWheel {
+            constructor() {
+                this.canvas = document.getElementById('wheelCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.spinBtn = document.getElementById('spinBtn');
+                this.resultEl = document.getElementById('result');
+                this.confirmStack = document.getElementById('confirmStack');
                 
-                video.addEventListener('loadeddata', function() {
-                    videosLoaded++;
-                    updateLoadingProgress();
-                    
-                    if (videosLoaded === totalVideos) {
-                        loading.textContent = "所有视频已加载完成，可以开始抽奖！";
-                        spinBtn.disabled = false;
-                    }
-                });
+                // 转盘配置
+                this.centerX = this.canvas.width / 2;
+                this.centerY = this.canvas.height / 2;
+                this.radius = Math.min(this.centerX, this.centerY) - 20;
                 
-                video.addEventListener('error', function() {
-                    videosLoaded++;
-                    updateLoadingProgress();
-                    console.error(`视频加载失败: ${prize.name}`);
-                    
-                    if (videosLoaded === totalVideos) {
-                        loading.textContent = "视频加载完成，可以开始抽奖（部分视频可能加载失败）";
-                        spinBtn.disabled = false;
-                    }
-                });
+                // 定义七个奖项 - 调整顺序，让"再来一次"在索引0，"神秘礼包"在索引1
+                this.prizes = [
+                    { name: '神秘礼包', color: '#FF9800', weight: 0 }, // 索引0
+                    { name: '再来一次', color: '#FF5252', weight: 100 }, // 索引1
+                    { name: '谢谢参与', color: '#FFEB3B', weight: 0 },
+                    { name: '奶茶一杯', color: '#4CAF50', weight: 0 },
+                    { name: '考试必过', color: '#2196F3', weight: 0 },
+                    { name: '幸运+999', color: '#9C27B0', weight: 0 },
+                    { name: '爱心奶茶', color: '#E91E63', weight: 0 }
+                ];
                 
-                videoBuffers[prize.name] = video;
-            });
-            
-            function updateLoadingProgress() {
-                loading.textContent = `视频加载中: ${videosLoaded}/${totalVideos}`;
+                // 动画相关
+                this.prizeCount = this.prizes.length;
+                this.angleStep = (2 * Math.PI) / this.prizeCount; // 每个扇形的弧度
+                
+                // 计算起始角度：让"再来一次"（索引0）的中心点对准指针
+                // 由于Canvas的0弧度在3点钟方向，而指针在12点钟方向，需要减去π/2进行校正
+                const startPrizeIndex = 0;
+                this.startAngle = (startPrizeIndex * this.angleStep + this.angleStep / 2) - Math.PI / 2;
+                
+                // 计算目标角度：让"神秘礼包"（索引1）的中心点对准指针
+                const targetPrizeIndex = 1;
+                this.targetAngle = (targetPrizeIndex * this.angleStep + this.angleStep / 2) - Math.PI / 2;
+                
+                // 计算从起始位置到目标位置需要旋转的角度
+                // 由于我们使用的是逆时针旋转（因为Canvas坐标系中正角度是逆时针）
+                // 所以从"再来一次"（索引0）到"神秘礼包"（索引1）是顺时针旋转一个扇区
+                // 对于逆时针旋转系统，这相当于逆时针旋转(总扇形数-1)个扇区
+                const clockwiseDistance = (targetPrizeIndex - startPrizeIndex + this.prizeCount) % this.prizeCount;
+                this.sectorDistance = clockwiseDistance; // 顺时针方向的扇区数
+                
+                this.rotation = this.startAngle;
+                this.spinSpeed = 0;
+                this.isSpinning = false;
+                this.targetPrizeIndex = 1; // 永远停在神秘礼包（索引1）
+                this.animationId = null;
+                this.spinStartTime = 0;
+                this.spinDuration = 4000;
+                
+                // 确认框相关
+                this.confirmBoxes = []; // 存储所有确认框元素
+                this.currentConfirmIndex = 0; // 当前激活的确认框索引
+                
+                this.init();
+                this.drawWheel();
+                this.createSparkles();
             }
             
-            function spinWheel() {
-                spinBtn.disabled = true;
-                result.textContent = "";
-                
-                const prizeIndex = Math.floor(Math.random() * prizes.length);
-                currentPrize = prizes[prizeIndex];
-                
-                const baseRotation = 360 * FIXED_ROTATION_COUNT;
-                const sectionAngle = 360 / prizes.length;
-                const targetAngle = baseRotation + (prizeIndex * sectionAngle) + (sectionAngle / 2);
-                
-                wheel.style.transform = `rotate(${targetAngle}deg)`;
-                
-                setTimeout(() => {
-                    result.innerHTML = `恭喜您获得了: <span class="result-prize">${currentPrize.name}</span>`;
-                    playPrizeVideo(currentPrize);
-                    spinBtn.disabled = false;
-                }, 5000);
+            init() {
+                this.spinBtn.addEventListener('click', () => this.startSpin());
             }
             
-            function playPrizeVideo(prize) {
-                const video = videoBuffers[prize.name];
+            drawWheel() {
+                const ctx = this.ctx;
+                const centerX = this.centerX;
+                const centerY = this.centerY;
+                const radius = this.radius;
+                const prizeCount = this.prizeCount;
+                const angleStep = this.angleStep;
                 
-                if (video) {
-                    videoPlayer.src = prize.video;
-                    videoPlayer.volume = (prize.name === "状元") ? 1.0 : 0.5;
+                // 清空画布
+                ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // 绘制转盘背景
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius + 5, 0, 2 * Math.PI);
+                ctx.fillStyle = '#000';
+                ctx.fill();
+                
+                // 保存状态并旋转画布
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(this.rotation);
+                
+                // 绘制扇形
+                for (let i = 0; i < prizeCount; i++) {
+                    const startAngle = i * angleStep;
+                    const endAngle = (i + 1) * angleStep;
                     
-                    videoContainer.style.display = 'flex';
-                    videoContainer.classList.add('landscape');
+                    // 绘制扇形
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.arc(0, 0, radius, startAngle, endAngle);
+                    ctx.closePath();
+                    ctx.fillStyle = this.prizes[i].color;
+                    ctx.fill();
                     
-                    videoPlayer.play().catch(e => {
-                        console.error("视频播放失败:", e);
-                    });
+                    // 绘制扇形边框
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
                     
-                    videoPlayer.onended = function() {
-                        replayPrompt.style.display = 'block';
-                    };
+                    // 保存状态以绘制文字
+                    ctx.save();
+                    
+                    // 计算扇形的中心角度
+                    const midAngle = startAngle + angleStep / 2;
+                    
+                    // 旋转到扇形的中心角度
+                    ctx.rotate(midAngle);
+                    
+                    // 移动到扇形中的位置（从圆心向外移动）
+                    const textRadius = radius * 0.6; // 文字位置（半径的60%处）
+                    
+                    // 绘制文字 - 确保文字在扇形中居中
+                    const prizeName = this.prizes[i].name;
+                    
+                    // 根据文字长度调整字体大小
+                    let fontSize = 18;
+                    if (prizeName.length >= 4) fontSize = 16;
+                    if (prizeName.length >= 5) fontSize = 14;
+                    
+                    ctx.font = `bold ${fontSize}px Microsoft YaHei`;
+                    ctx.fillStyle = this.getContrastColor(this.prizes[i].color);
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    // 绘制文字 - 注意：这里文字方向是沿着半径方向
+                    ctx.fillText(prizeName, textRadius, 0);
+                    
+                    // 恢复状态
+                    ctx.restore();
+                }
+                
+                // 绘制中心圆
+                ctx.beginPath();
+                ctx.arc(0, 0, 30, 0, 2 * Math.PI);
+                ctx.fillStyle = 'white';
+                ctx.fill();
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 5;
+                ctx.stroke();
+                
+                // 绘制中心文字
+                ctx.fillStyle = '#333';
+                ctx.font = 'bold 20px Microsoft YaHei';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('GO', 0, 0);
+                
+                ctx.restore();
+            }
+            
+            getContrastColor(hexColor) {
+                if (!hexColor || hexColor.length < 7) return '#000';
+                
+                const r = parseInt(hexColor.substr(1, 2), 16);
+                const g = parseInt(hexColor.substr(3, 2), 16);
+                const b = parseInt(hexColor.substr(5, 2), 16);
+                const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+                return brightness > 128 ? '#000' : '#FFF';
+            }
+            
+            selectPrizeByWeight() {
+                // 永远返回神秘礼包（索引1）
+                return 1;
+            }
+            
+            startSpin() {
+                if (this.isSpinning) return;
+                
+                this.isSpinning = true;
+                this.spinBtn.disabled = true;
+                
+                // 隐藏结果框
+                this.resultEl.classList.remove('show');
+                
+                // 固定选择神秘礼包（索引1）
+                this.targetPrizeIndex = this.selectPrizeByWeight();
+                
+                // 重置到起始位置
+                this.rotation = this.startAngle;
+                
+                // 设置初始速度
+                const baseSpeed = 8 + Math.random() * 4;
+                this.spinSpeed = baseSpeed;
+                
+                this.spinStartTime = Date.now();
+                this.animate();
+            }
+            
+            animate() {
+                const currentTime = Date.now();
+                const elapsed = currentTime - this.spinStartTime;
+                const progress = Math.min(elapsed / this.spinDuration, 1);
+                
+                // 使用缓动函数
+                const easeOut = 1 - Math.pow(1 - progress, 3);
+                
+                // 计算从起始位置到目标位置需要旋转的总角度
+                // 我们需要逆时针旋转，所以角度为负数
+                // 总旋转 = 额外圈数(逆时针) + 目标角度与起始角度的差值
+                const extraRotations = 5; // 额外的5圈
+                
+                // 计算顺时针方向从"再来一次"到"神秘礼包"的角度差
+                const clockwiseAngleDiff = this.sectorDistance * this.angleStep;
+                
+                // 转换为逆时针旋转的角度（Canvas坐标系）
+                // 逆时针旋转角度 = 2π - 顺时针角度
+                const counterClockwiseAngleDiff = (2 * Math.PI) - clockwiseAngleDiff;
+                
+                // 总旋转角度 = 额外的逆时针圈数 + 逆时针角度差
+                const totalRotation = extraRotations * (2 * Math.PI) + counterClockwiseAngleDiff;
+                
+                // 应用缓动函数计算当前旋转角度
+                this.rotation = this.startAngle + (easeOut * totalRotation);
+                
+                // 重新绘制
+                this.drawWheel();
+                
+                // 检查是否完成
+                if (progress < 1) {
+                    this.animationId = requestAnimationFrame(() => this.animate());
                 } else {
-                    console.error(`未找到 ${prize.name} 的视频`);
-                    alert(`恭喜获得 ${prize.name}！视频播放失败，请刷新页面重试。`);
+                    this.finishSpin();
                 }
             }
             
-            function closeVideoPlayer() {
-                videoContainer.style.display = 'none';
-                videoContainer.classList.remove('landscape');
-                videoPlayer.pause();
-                videoPlayer.currentTime = 0;
-                replayPrompt.style.display = 'none';
-            }
-            
-            function replayVideo() {
-                videoPlayer.currentTime = 0;
-                videoPlayer.play();
-                replayPrompt.style.display = 'none';
-            }
-            
-            // 显示"想屁吃"特效
-            function showXiangPiChi() {
-                const xiangPiChi = document.createElement('div');
-                xiangPiChi.className = 'xiang-pi-chi';
-                xiangPiChi.textContent = '想屁吃';
-                document.body.appendChild(xiangPiChi);
+            finishSpin() {
+                this.isSpinning = false;
+                this.spinBtn.disabled = false;
                 
-                // 3秒后移除元素
+                // 显示结果 - 固定显示神秘礼包
+                const selectedPrize = this.prizes[1]; // 直接使用索引1
+                const fullName = '神秘大礼包'; // 固定显示完整名称
+                
+                this.resultEl.textContent = `🎉 ${fullName}`;
+                this.resultEl.style.background = selectedPrize.color;
+                this.resultEl.classList.add('show');
+                
+                // 延迟800毫秒后显示确认框
                 setTimeout(() => {
-                    document.body.removeChild(xiangPiChi);
-                }, 3000);
+                    this.showConfirmDialog(fullName);
+                }, 800);
             }
             
-            // 事件监听
-            spinBtn.addEventListener('click', spinWheel);
-            closeVideo.addEventListener('click', closeVideoPlayer);
+            showConfirmDialog(prizeName) {
+                // 清除所有现有的确认框
+                this.clearConfirmBoxes();
+                
+                // 创建第一个确认框
+                this.createConfirmBox(prizeName, 0);
+            }
             
-            // 修改重复播放按钮事件
-            replayYes.addEventListener('click', function() {
-                closeVideoPlayer();
-                showXiangPiChi();
-            });
+            createConfirmBox(prizeName, index) {
+                // 创建确认框元素
+                const confirmBox = document.createElement('div');
+                confirmBox.className = 'stacked-confirm';
+                confirmBox.dataset.index = index;
+                
+                // 设置确认框内容
+                confirmBox.innerHTML = `
+                    <div class="confirm-title">🎉 恭喜中奖！</div>
+                    <div class="confirm-message">您抽中了：${prizeName}！<br>是否立即领取？</div>
+                    <div class="confirm-buttons">
+                        <button class="confirm-btn confirm-yes">是，立即领取</button>
+                        <button class="confirm-btn confirm-no">否，暂不领取</button>
+                    </div>
+                `;
+                
+                // 添加到堆叠容器
+                this.confirmStack.appendChild(confirmBox);
+                
+                // 存储到数组
+                this.confirmBoxes.push(confirmBox);
+                
+                // 设置当前激活的确认框索引
+                this.currentConfirmIndex = index;
+                
+                // 延迟显示确认框
+                setTimeout(() => {
+                    confirmBox.classList.add('active');
+                }, 50);
+                
+                // 绑定按钮事件
+                const yesBtn = confirmBox.querySelector('.confirm-yes');
+                const noBtn = confirmBox.querySelector('.confirm-no');
+                
+                yesBtn.addEventListener('click', () => {
+                    this.handleConfirm(true, index);
+                });
+                
+                noBtn.addEventListener('click', () => {
+                    this.handleConfirm(false, index);
+                });
+            }
             
-            replayNo.addEventListener('click', closeVideoPlayer);
-            
-            videoContainer.addEventListener('click', function(e) {
-                if (e.target === videoContainer) {
-                    closeVideoPlayer();
+            handleConfirm(confirmed, index) {
+                if (confirmed) {
+                    // 用户点击"是"，跳转到目标网页
+                    window.location.href = 'https://xn--wbv461i.fxgqc.top/';
+                } else {
+                    // 用户点击"否"，将当前确认框标记为历史记录
+                    const currentBox = this.confirmBoxes[index];
+                    if (currentBox) {
+                        currentBox.classList.add('history');
+                    }
+                    
+                    // 创建新的确认框（索引+1）
+                    const fullName = '神秘大礼包';
+                    this.createConfirmBox(fullName, index + 1);
                 }
-            });
+            }
             
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape' && videoContainer.style.display === 'flex') {
-                    closeVideoPlayer();
+            clearConfirmBoxes() {
+                // 移除所有确认框
+                while (this.confirmStack.firstChild) {
+                    this.confirmStack.removeChild(this.confirmStack.firstChild);
                 }
-            });
-        });
+                
+                // 清空数组
+                this.confirmBoxes = [];
+                this.currentConfirmIndex = 0;
+            }
+            
+            createSparkles() {
+                // 创建背景闪烁效果
+                for (let i = 0; i < 30; i++) {
+                    const sparkle = document.createElement('div');
+                    sparkle.className = 'sparkle';
+                    sparkle.style.left = `${Math.random() * 100}vw`;
+                    sparkle.style.top = `${Math.random() * 100}vh`;
+                    sparkle.style.animationDelay = `${Math.random() * 2}s`;
+                    sparkle.style.opacity = Math.random() * 0.5 + 0.2;
+                    document.body.appendChild(sparkle);
+                }
+            }
+        }
+        
+        // 初始化转盘
+        const lotteryWheel = new SimpleLotteryWheel();
     </script>
 </body>
 </html>
