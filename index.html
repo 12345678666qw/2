@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>表格排序替换 · 全表格表头全选/取消</title>
+    <title>表格排序替换 · 列头框选整列</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
@@ -116,8 +116,8 @@
 <div class="container">
     <div style="text-align:center; padding:8px 0;">
         <span style="font-size:32px;">📄⚡📊⚡📄</span>
-        <h2 style="font-size:1.4rem;">表格排序替换 · 全表格表头全选/取消</h2>
-        <p style="color:#64748b;">点击表头全选，再次点击清空；单元格单击切换</p>
+        <h2 style="font-size:1.4rem;">表格排序替换 · 列头框选整列</h2>
+        <p style="color:#64748b;">点击列头选中/取消整列；单元格单击切换</p>
     </div>
 
     <!-- 上传 -->
@@ -142,7 +142,7 @@
 
     <!-- 表格预览与选择 -->
     <div class="card" id="previewCard" style="display:none;">
-        <h3>👁️ 源表格 & 目标表格 · 表头切换全选 / 单元格切换</h3>
+        <h3>👁️ 源表格 & 目标表格 · 列头框选/单元格切换</h3>
         <div style="display:flex; gap:12px; flex-wrap:wrap;">
             <div style="flex:1; min-width:300px;">
                 <div class="table-toolbar">
@@ -171,7 +171,7 @@
 
     <!-- 排序依据 -->
     <div class="card" id="sortRefCard" style="display:none;">
-        <h3>📊 排序依据 (Excel/Word) · 表头全选/取消，单元格累积</h3>
+        <h3>📊 排序依据 (Excel/Word) · 列头框选整列</h3>
         <div class="upload-row" style="margin-bottom:12px;">
             <div class="upload-box" id="refBox">
                 <span class="icon">📋</span><p>排序依据文档</p>
@@ -446,7 +446,7 @@
             th.textContent = String.fromCharCode(65 + j);
             th.addEventListener('click', (e) => {
                 e.stopPropagation();
-                handleColumnClick(type, j, e.ctrlKey || e.metaKey);
+                handleColumnClick(type, j);
             });
             hRow.appendChild(th);
         }
@@ -472,37 +472,27 @@
         highlightCells(container, type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells);
     }
 
-    // 统一的列头点击处理：所有表格均采用“全选/取消”切换
-    function handleColumnClick(type, col, multiSelect) {
+    // 列头点击：切换整列选中状态
+    function handleColumnClick(type, col) {
         const wrapper = type === 'source' ? sourcePreview : type === 'target' ? targetPreview : refPreview;
         const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
         const tables = type === 'source' ? sourceTables : type === 'target' ? targetTables : refTables;
         const index = type === 'source' ? srcIdx : type === 'target' ? tgtIdx : refIdx;
         const table = tables[index];
         
-        // 计算当前表格的总单元格数
-        let totalCells = 0;
-        for (let r = 0; r < table.rows.length; r++) {
-            totalCells += table.rows[r].length;
-        }
-        const isAllSelected = cells.size === totalCells && totalCells > 0;
-
-        if (isAllSelected) {
-            // 已全选 → 清空
-            cells.clear();
+        // 检查该列是否全部选中
+        const allSelected = Array.from({length: table.rows.length}, (_, r) => `${r}-${col}`).every(key => cells.has(key));
+        if (allSelected) {
+            // 取消该列
+            for (let r = 0; r < table.rows.length; r++) cells.delete(`${r}-${col}`);
         } else {
-            // 未全选 → 全选
-            cells.clear();
-            for (let r = 0; r < table.rows.length; r++) {
-                for (let c = 0; c < table.rows[r].length; c++) {
-                    cells.add(`${r}-${c}`);
-                }
-            }
+            // 选中该列
+            for (let r = 0; r < table.rows.length; r++) if (col < table.rows[r].length) cells.add(`${r}-${col}`);
         }
         highlightCells(wrapper, cells);
     }
 
-    // 单元格点击/触摸：切换模式
+    // 单元格点击：切换单个单元格
     function startBoxSelect(e, type, wrapper) {
         if (!e.target.matches('td')) return;
         e.preventDefault();
@@ -513,8 +503,6 @@
         const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
         const row = +e.target.dataset.row, col = +e.target.dataset.col;
         const key = `${row}-${col}`;
-
-        // 所有表格统一：切换单个单元格选中状态
         if (cells.has(key)) {
             cells.delete(key);
             touchDeleteMode = true;
@@ -535,7 +523,6 @@
         const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
         const row = +e.target.dataset.row, col = +e.target.dataset.col;
         const key = `${row}-${col}`;
-
         if (touchDeleteMode) {
             cells.delete(key);
         } else {
@@ -560,7 +547,6 @@
         lastClientY = touch.clientY;
         const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
         const key = `${target.dataset.row}-${target.dataset.col}`;
-
         if (cells.has(key)) {
             cells.delete(key);
             touchDeleteMode = true;
@@ -584,7 +570,6 @@
         const wrapper = type === 'source' ? sourcePreview : type === 'target' ? targetPreview : refPreview;
         const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
         const key = `${target.dataset.row}-${target.dataset.col}`;
-
         if (touchDeleteMode) {
             cells.delete(key);
         } else {
