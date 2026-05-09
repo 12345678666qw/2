@@ -2,668 +2,731 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>转盘抽奖</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>表格排序替换</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root {
+            --bg: #f8fafc; --card-bg: #ffffff; --primary: #5b6af0;
+            --success: #10b981; --text: #1e293b; --text-secondary: #64748b;
+            --border: #e2e8f0; --radius: 12px;
         }
-        
+        * { margin:0; padding:0; box-sizing:border-box; }
         body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            background: #121212;
-            font-family: 'Microsoft YaHei', sans-serif;
-            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg); color: var(--text); padding: 12px;
+            display: flex; justify-content: center; min-height: 100vh;
         }
-        
-        .wheel-container {
-            position: relative;
-            width: 400px;
-            height: 400px;
-            margin: 0 auto;
+        .container { width: 100%; max-width: 1000px; display: flex; flex-direction: column; gap: 16px; }
+        .card {
+            background: var(--card-bg); border-radius: var(--radius); padding: 16px;
+            border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
-        
-        canvas {
-            display: block;
-            margin: 0 auto;
-            border-radius: 50%;
-            box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
-            background: #000;
-            width: 100%;
-            height: 100%;
+        h3 { font-size: 1rem; margin-bottom: 8px; }
+        .upload-row { display: flex; gap: 12px; flex-wrap: wrap; }
+        .upload-box {
+            flex: 1; min-width: 150px; border: 2px dashed #cbd5e1; border-radius: var(--radius);
+            padding: 14px 8px; text-align: center; cursor: pointer; background: #fafbfc; touch-action: manipulation;
         }
-        
-        .pointer {
-            position: absolute;
-            top: -20px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 0;
-            height: 0;
-            border-left: 25px solid transparent;
-            border-right: 25px solid transparent;
-            border-top: 50px solid #FF0000;
-            z-index: 10;
-            filter: drop-shadow(0 5px 10px rgba(255, 0, 0, 0.5));
+        .upload-box:active { background: #eef2ff; border-color: var(--primary); }
+        .upload-box .icon { font-size: 28px; display: block; }
+        .upload-box p { font-size: 0.8rem; margin:4px 0 0; color:var(--text-secondary); }
+        .upload-box .file-name { font-size:0.75rem; color:var(--primary); margin-top:4px; font-weight:600; }
+        .upload-box input[type="file"] { display: none; }
+
+        .table-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+        .table-toolbar select { padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; }
+        .table-preview-wrapper {
+            overflow-y: auto; max-height: 300px; border: 1px solid var(--border);
+            border-radius: 8px; position: relative; user-select: none; touch-action: none;
         }
-        
-        .pointer::after {
-            content: '';
-            position: absolute;
-            top: -15px;
-            left: -15px;
-            width: 30px;
-            height: 30px;
-            background: #FF0000;
-            border-radius: 50%;
+        .table-preview {
+            border-collapse: collapse; width: max-content; min-width: 100%; font-size: 0.8rem;
         }
-        
-        .spin-btn {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 100px;
-            height: 100px;
-            border-radius: 50%;
-            background: linear-gradient(45deg, #FF6B6B, #FF8E53);
-            border: none;
-            color: white;
-            font-size: 20px;
-            font-weight: bold;
-            cursor: pointer;
-            z-index: 5;
-            box-shadow: 0 0 30px rgba(255, 107, 107, 0.8);
-            transition: all 0.3s;
-            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
+        .table-preview td, .table-preview th {
+            border: 1px solid #ddd; padding: 6px 8px; text-align: left; white-space: nowrap;
         }
-        
-        .spin-btn:hover:not(:disabled) {
-            transform: translate(-50%, -50%) scale(1.1);
-            box-shadow: 0 0 40px rgba(255, 107, 107, 1);
+        .table-preview th { background: #f1f5f9; cursor: pointer; }
+        .table-preview td.selected, .table-preview th.selected { background: #dbeafe !important; }
+        .row-header { cursor: pointer; min-width: 30px; text-align: center; }
+
+        .sort-list {
+            list-style: none; max-height: 250px; overflow-y: auto;
+            border: 1px solid var(--border); border-radius: 8px;
         }
-        
-        .spin-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+        .sort-item {
+            display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+            background: #fff; border-bottom: 1px solid #f1f5f9; cursor: grab;
         }
-        
-        #result {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 90%;
-            max-width: 500px;
-            padding: 25px;
-            background: rgba(0, 0, 0, 0.8);
-            border-radius: 15px;
-            font-size: 28px;
-            font-weight: bold;
-            color: white;
-            text-align: center;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-            z-index: 100;
-            backdrop-filter: blur(10px);
-            border: 2px solid rgba(255, 255, 255, 0.1);
-            opacity: 0;
-            transition: opacity 0.5s, transform 0.5s;
-            transform: translateX(-50%) translateY(50px);
+        .sort-item.empty-slot { color: #94a3b8; font-style: italic; }
+        .sort-item .drag-handle { color: #94a3b8; cursor: grab; }
+        .sort-item .item-text { flex: 1; font-size: 0.9rem; user-select: none; }
+        .sort-item .edit-btn {
+            background: none; border: 1px solid #cbd5e1; border-radius: 4px;
+            padding: 2px 6px; font-size: 0.8rem; cursor: pointer; color: #64748b;
         }
-        
-        #result.show {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
+        .sort-item .edit-btn:hover { background: #f1f5f9; color: #1e293b; }
+
+        .btn {
+            padding: 10px 16px; border: none; border-radius: 8px; font-size: 0.9rem;
+            font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+            transition: 0.2s; touch-action: manipulation;
         }
-        
-        @media (max-width: 500px) {
-            .wheel-container {
-                width: 300px;
-                height: 300px;
-            }
-            
-            #result {
-                font-size: 22px;
-                padding: 20px;
-            }
-            
-            .spin-btn {
-                width: 80px;
-                height: 80px;
-                font-size: 18px;
-            }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-success { background: var(--success); color: #fff; }
+        .btn-outline { background: #fff; color: var(--primary); border: 2px solid var(--primary); }
+        .btn-sm { padding: 8px 12px; font-size: 0.8rem; }
+        .toast {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px);
+            background: #1e293b; color: #fff; padding: 12px 24px; border-radius: 30px;
+            font-size: 0.85rem; z-index: 999; transition: 0.3s; pointer-events: none;
+            white-space: nowrap;
         }
-        
-        @keyframes sparkle {
-            0%, 100% { opacity: 0.3; }
-            50% { opacity: 1; }
+        .toast.show { transform: translateX(-50%) translateY(0); }
+        .export-inline {
+            display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center;
         }
-        
-        .sparkle {
-            position: absolute;
-            width: 10px;
-            height: 10px;
-            background: white;
-            border-radius: 50%;
-            box-shadow: 0 0 10px white;
-            animation: sparkle 2s infinite;
+        .export-inline input {
+            padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px;
+            font-size: 0.9rem; width: 200px; max-width: 100%;
         }
-        
-        /* 自定义确认框样式 - 增强视觉体验 */
-        .custom-confirm {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.3);
-            z-index: 1000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            opacity: 0;
-            transition: opacity 0.3s;
-            pointer-events: none;
-        }
-        
-        .custom-confirm.active {
-            opacity: 1;
-            pointer-events: all;
-        }
-        
-        .confirm-box {
-            background: linear-gradient(135deg, #1a1a2e, #16213e);
-            padding: 30px;
-            border-radius: 20px;
-            text-align: center;
-            max-width: 400px;
-            width: 90%;
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.7);
-            border: 2px solid rgba(255, 255, 255, 0.1);
-            transform: translateY(20px);
-            transition: transform 0.3s;
-            position: absolute;
-        }
-        
-        .custom-confirm.active .confirm-box {
-            transform: translateY(0);
-        }
-        
-        .confirm-title {
-            font-size: 28px;
-            color: #FFD700;
-            margin-bottom: 15px;
-            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
-        }
-        
-        .confirm-message {
-            font-size: 20px;
-            color: #fff;
-            margin-bottom: 30px;
-            line-height: 1.5;
-        }
-        
-        .confirm-buttons {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-        }
-        
-        .confirm-btn {
-            padding: 12px 30px;
-            border: none;
-            border-radius: 50px;
-            font-size: 18px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s;
-            min-width: 120px;
-        }
-        
-        .confirm-yes {
-            background: linear-gradient(45deg, #4CAF50, #8BC34A);
-            color: white;
-            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
-        }
-        
-        .confirm-yes:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(76, 175, 80, 0.6);
-        }
-        
-        .confirm-no {
-            background: linear-gradient(45deg, #FF5252, #FF8A80);
-            color: white;
-            box-shadow: 0 5px 15px rgba(255, 82, 82, 0.4);
-        }
-        
-        .confirm-no:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(255, 82, 82, 0.6);
-        }
-        
-        /* 确认框堆叠容器 */
-        .confirm-stack {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1000;
-            pointer-events: none;
-        }
-        
-        /* 堆叠确认框样式 */
-        .stacked-confirm {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: linear-gradient(135deg, #1a1a2e, #16213e);
-            padding: 30px;
-            border-radius: 20px;
-            text-align: center;
-            max-width: 400px;
-            width: 90%;
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.7);
-            border: 2px solid rgba(255, 255, 255, 0.1);
-            opacity: 0;
-            transition: all 0.4s ease-out;
-            pointer-events: all;
-        }
-        
-        .stacked-confirm.active {
-            opacity: 1;
-        }
-        
-        /* 为每个堆叠的确认框设置不同的偏移 */
-        .stacked-confirm:nth-child(1) { z-index: 1003; }
-        .stacked-confirm:nth-child(2) { 
-            z-index: 1002;
-            transform: translate(-50%, -50%) translateX(15px) translateY(15px);
-        }
-        .stacked-confirm:nth-child(3) { 
-            z-index: 1001;
-            transform: translate(-50%, -50%) translateX(30px) translateY(30px);
-        }
-        .stacked-confirm:nth-child(4) { 
-            z-index: 1000;
-            transform: translate(-50%, -50%) translateX(45px) translateY(45px);
-        }
-        .stacked-confirm:nth-child(5) { 
-            z-index: 999;
-            transform: translate(-50%, -50%) translateX(60px) translateY(60px);
-        }
-        
-        /* 历史确认框样式 - 降低透明度 */
-        .stacked-confirm.history {
-            opacity: 0.4;
-            pointer-events: none;
+        .sort-btns { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+        .threshold-input {
+            width: 70px; padding: 8px; border: 2px solid var(--border); border-radius: 8px;
+            font-size: 0.85rem; text-align: center;
         }
     </style>
 </head>
 <body>
-    <div class="wheel-container">
-        <canvas id="wheelCanvas" width="400" height="400"></canvas>
-        <div class="pointer"></div>
-        <button class="spin-btn" id="spinBtn">GO</button>
+<div class="container">
+    <div style="text-align:center; padding:8px 0;">
+        <span style="font-size:32px;">📄⚡📊⚡📄</span>
+        <h2 style="font-size:1.4rem;">表格排序替换 · 可编辑数据源</h2>
+        <p style="color:#64748b;">框选行列，自定义相似度，双击文本直接修改</p>
     </div>
-    
-    <div id="result"></div>
-    
-    <!-- 确认框堆叠容器 -->
-    <div class="confirm-stack" id="confirmStack"></div>
 
-    <script>
-        class SimpleLotteryWheel {
-            constructor() {
-                this.canvas = document.getElementById('wheelCanvas');
-                this.ctx = this.canvas.getContext('2d');
-                this.spinBtn = document.getElementById('spinBtn');
-                this.resultEl = document.getElementById('result');
-                this.confirmStack = document.getElementById('confirmStack');
-                
-                // 转盘配置
-                this.centerX = this.canvas.width / 2;
-                this.centerY = this.canvas.height / 2;
-                this.radius = Math.min(this.centerX, this.centerY) - 20;
-                
-                // 定义七个奖项 - 调整顺序，让"再来一次"在索引0，"神秘礼包"在索引1
-                this.prizes = [
-                    { name: '神秘礼包', color: '#FF9800', weight: 0 }, // 索引0
-                    { name: '再来一次', color: '#FF5252', weight: 100 }, // 索引1
-                    { name: '谢谢参与', color: '#FFEB3B', weight: 0 },
-                    { name: '奶茶一杯', color: '#4CAF50', weight: 0 },
-                    { name: '考试必过', color: '#2196F3', weight: 0 },
-                    { name: '幸运+999', color: '#9C27B0', weight: 0 },
-                    { name: '爱心奶茶', color: '#E91E63', weight: 0 }
-                ];
-                
-                // 动画相关
-                this.prizeCount = this.prizes.length;
-                this.angleStep = (2 * Math.PI) / this.prizeCount; // 每个扇形的弧度
-                
-                // 计算起始角度：让"再来一次"（索引0）的中心点对准指针
-                // 由于Canvas的0弧度在3点钟方向，而指针在12点钟方向，需要减去π/2进行校正
-                const startPrizeIndex = 0;
-                this.startAngle = (startPrizeIndex * this.angleStep + this.angleStep / 2) - Math.PI / 2;
-                
-                // 计算目标角度：让"神秘礼包"（索引1）的中心点对准指针
-                const targetPrizeIndex = 1;
-                this.targetAngle = (targetPrizeIndex * this.angleStep + this.angleStep / 2) - Math.PI / 2;
-                
-                // 计算从起始位置到目标位置需要旋转的角度
-                // 由于我们使用的是逆时针旋转（因为Canvas坐标系中正角度是逆时针）
-                // 所以从"再来一次"（索引0）到"神秘礼包"（索引1）是顺时针旋转一个扇区
-                // 对于逆时针旋转系统，这相当于逆时针旋转(总扇形数-1)个扇区
-                const clockwiseDistance = (targetPrizeIndex - startPrizeIndex + this.prizeCount) % this.prizeCount;
-                this.sectorDistance = clockwiseDistance; // 顺时针方向的扇区数
-                
-                this.rotation = this.startAngle;
-                this.spinSpeed = 0;
-                this.isSpinning = false;
-                this.targetPrizeIndex = 1; // 永远停在神秘礼包（索引1）
-                this.animationId = null;
-                this.spinStartTime = 0;
-                this.spinDuration = 4000;
-                
-                // 确认框相关
-                this.confirmBoxes = []; // 存储所有确认框元素
-                this.currentConfirmIndex = 0; // 当前激活的确认框索引
-                
-                this.init();
-                this.drawWheel();
-                this.createSparkles();
+    <!-- 上传 -->
+    <div class="card">
+        <h3>📤 上传源文档与目标文档 (.docx)</h3>
+        <div class="upload-row">
+            <div class="upload-box" id="sourceBox">
+                <span class="icon">📎</span><p>源文档</p>
+                <div class="file-name" id="sourceName"></div>
+                <input type="file" id="sourceFile" accept=".docx">
+            </div>
+            <div class="upload-box" id="targetBox">
+                <span class="icon">📌</span><p>目标文档</p>
+                <div class="file-name" id="targetName"></div>
+                <input type="file" id="targetFile" accept=".docx">
+            </div>
+        </div>
+    </div>
+
+    <!-- 表格预览与选择 -->
+    <div class="card" id="previewCard" style="display:none;">
+        <h3>👁️ 源表格 & 目标表格 · 向下滑框选 / 向上滑取消</h3>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:300px;">
+                <div class="table-toolbar"><label>源表格</label><select id="sourceTableSel"></select></div>
+                <div class="table-preview-wrapper" id="sourcePreview"></div>
+            </div>
+            <div style="flex:1; min-width:300px;">
+                <div class="table-toolbar"><label>目标表格</label><select id="targetTableSel"></select></div>
+                <div class="table-preview-wrapper" id="targetPreview"></div>
+            </div>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+            <button class="btn btn-primary btn-sm" id="extractBtn">✅ 确认选择并提取</button>
+            <button class="btn btn-outline btn-sm" id="clearSelBtn">🔄 清除全部选择</button>
+        </div>
+    </div>
+
+    <!-- 排序依据 -->
+    <div class="card" id="sortRefCard" style="display:none;">
+        <h3>📊 排序依据 (Excel/Word) · 同样支持点击列头/框选</h3>
+        <div class="upload-row" style="margin-bottom:12px;">
+            <div class="upload-box" id="refBox">
+                <span class="icon">📋</span><p>排序依据文档</p>
+                <div class="file-name" id="refName"></div>
+                <input type="file" id="refFile" accept=".xlsx,.docx">
+            </div>
+        </div>
+        <div id="refPreviewArea" style="display:none;">
+            <div class="table-toolbar">
+                <label>表格</label><select id="refTableSel"></select>
+            </div>
+            <div class="table-preview-wrapper" id="refPreview" style="max-height:200px;"></div>
+            <div style="margin-top:6px;">
+                <div class="sort-btns">
+                    <button class="btn btn-sm btn-primary" id="applySortBtn">🔄 精确匹配</button>
+                    <button class="btn btn-sm btn-outline" id="fuzzySort90Btn">🔍 模糊 ≥90%</button>
+                    <button class="btn btn-sm btn-outline" id="fuzzySort75Btn">🔍 模糊 ≥75%</button>
+                    <input type="number" id="fuzzyThreshold" class="threshold-input" value="90" min="20" max="95" step="1">
+                    <span style="font-size:0.8rem;">%</span>
+                    <button class="btn btn-sm btn-outline" id="fuzzyCustomBtn">🔍 自定义阈值匹配</button>
+                </div>
+                <span id="refStatus" style="font-size:0.75rem; color:#64748b; margin-top:4px; display:inline-block;"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 排序列表 -->
+    <div class="card" id="sortCard" style="display:none;">
+        <h3>📋 排序列表（可拖拽、双击文本编辑、非空拖入空位填充）</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span id="info"></span>
+            <button class="btn btn-sm btn-outline" id="resetBtn">恢复原始顺序</button>
+        </div>
+        <ul class="sort-list" id="sortList"></ul>
+    </div>
+
+    <!-- 导出与分享 -->
+    <div class="card" id="exportCard">
+        <h3>📤 导出并分享</h3>
+        <div class="export-inline">
+            <input type="text" id="exportFileName" value="排序替换结果" placeholder="文件名">
+            <button class="btn btn-success" id="exportBtn" disabled>📄 导出并分享到微信/QQ</button>
+        </div>
+        <p style="font-size:0.75rem; color:#64748b; margin-top:6px;">
+            仅替换文本，保留原格式；空位将清空单元格。提取数据后按钮启用。
+        </p>
+    </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+    let sourceZip, targetZip, sourceXml, targetXml;
+    let sourceTables = [], targetTables = [], refTables = [];
+    let srcIdx = 0, tgtIdx = 0, refIdx = 0;
+    let sourceCells = new Set(), targetCells = new Set(), refCells = new Set();
+    let extractedData = [], sortedData = [], originalData = [];
+    let currentType = null;
+    let lastClientY = null;
+    let isSelecting = false;
+
+    const sourceFile = document.getElementById('sourceFile');
+    const targetFile = document.getElementById('targetFile');
+    const refFile = document.getElementById('refFile');
+    const sourceName = document.getElementById('sourceName');
+    const targetName = document.getElementById('targetName');
+    const refName = document.getElementById('refName');
+    const sourcePreview = document.getElementById('sourcePreview');
+    const targetPreview = document.getElementById('targetPreview');
+    const refPreview = document.getElementById('refPreview');
+    const sourceTableSel = document.getElementById('sourceTableSel');
+    const targetTableSel = document.getElementById('targetTableSel');
+    const refTableSel = document.getElementById('refTableSel');
+    const extractBtn = document.getElementById('extractBtn');
+    const clearSelBtn = document.getElementById('clearSelBtn');
+    const applySortBtn = document.getElementById('applySortBtn');
+    const fuzzySort90Btn = document.getElementById('fuzzySort90Btn');
+    const fuzzySort75Btn = document.getElementById('fuzzySort75Btn');
+    const fuzzyCustomBtn = document.getElementById('fuzzyCustomBtn');
+    const fuzzyThreshold = document.getElementById('fuzzyThreshold');
+    const sortListEl = document.getElementById('sortList');
+    const info = document.getElementById('info');
+    const resetBtn = document.getElementById('resetBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const exportFileName = document.getElementById('exportFileName');
+    const toastEl = document.getElementById('toast');
+    const refStatus = document.getElementById('refStatus');
+
+    function toast(msg) {
+        toastEl.textContent = msg;
+        toastEl.classList.add('show');
+        setTimeout(() => toastEl.classList.remove('show'), 2000);
+    }
+
+    function updateExportButton() {
+        exportBtn.disabled = !sortedData.length || !targetCells.size;
+    }
+
+    // 上传事件
+    document.getElementById('sourceBox').addEventListener('click', ()=> sourceFile.click());
+    document.getElementById('targetBox').addEventListener('click', ()=> targetFile.click());
+    document.getElementById('refBox').addEventListener('click', ()=> refFile.click());
+
+    sourceFile.addEventListener('change', e => handleDoc(e, 'source'));
+    targetFile.addEventListener('change', e => handleDoc(e, 'target'));
+    refFile.addEventListener('change', e => handleRefUpload(e));
+
+    async function handleDoc(event, type) {
+        const file = event.target.files[0];
+        if (!file?.name.endsWith('.docx')) { toast('请上传 .docx'); return; }
+        toast('解析中...');
+        try {
+            const zip = await JSZip.loadAsync(file);
+            const xml = await zip.file('word/document.xml')?.async('string');
+            if (!xml) throw new Error('无 document.xml');
+            const tables = parseAllTables(xml);
+            if (type === 'source') {
+                sourceZip = zip; sourceXml = xml; sourceTables = tables; sourceName.textContent = file.name;
+                populateSelect(sourceTableSel, tables.length);
+                renderTable(sourcePreview, tables[0], 'source');
+            } else {
+                targetZip = zip; targetXml = xml; targetTables = tables; targetName.textContent = file.name;
+                populateSelect(targetTableSel, tables.length);
+                renderTable(targetPreview, tables[0], 'target');
             }
-            
-            init() {
-                this.spinBtn.addEventListener('click', () => this.startSpin());
-            }
-            
-            drawWheel() {
-                const ctx = this.ctx;
-                const centerX = this.centerX;
-                const centerY = this.centerY;
-                const radius = this.radius;
-                const prizeCount = this.prizeCount;
-                const angleStep = this.angleStep;
-                
-                // 清空画布
-                ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-                
-                // 绘制转盘背景
-                ctx.beginPath();
-                ctx.arc(centerX, centerY, radius + 5, 0, 2 * Math.PI);
-                ctx.fillStyle = '#000';
-                ctx.fill();
-                
-                // 保存状态并旋转画布
-                ctx.save();
-                ctx.translate(centerX, centerY);
-                ctx.rotate(this.rotation);
-                
-                // 绘制扇形
-                for (let i = 0; i < prizeCount; i++) {
-                    const startAngle = i * angleStep;
-                    const endAngle = (i + 1) * angleStep;
-                    
-                    // 绘制扇形
-                    ctx.beginPath();
-                    ctx.moveTo(0, 0);
-                    ctx.arc(0, 0, radius, startAngle, endAngle);
-                    ctx.closePath();
-                    ctx.fillStyle = this.prizes[i].color;
-                    ctx.fill();
-                    
-                    // 绘制扇形边框
-                    ctx.strokeStyle = 'white';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                    
-                    // 保存状态以绘制文字
-                    ctx.save();
-                    
-                    // 计算扇形的中心角度
-                    const midAngle = startAngle + angleStep / 2;
-                    
-                    // 旋转到扇形的中心角度
-                    ctx.rotate(midAngle);
-                    
-                    // 移动到扇形中的位置（从圆心向外移动）
-                    const textRadius = radius * 0.6; // 文字位置（半径的60%处）
-                    
-                    // 绘制文字 - 确保文字在扇形中居中
-                    const prizeName = this.prizes[i].name;
-                    
-                    // 根据文字长度调整字体大小
-                    let fontSize = 18;
-                    if (prizeName.length >= 4) fontSize = 16;
-                    if (prizeName.length >= 5) fontSize = 14;
-                    
-                    ctx.font = `bold ${fontSize}px Microsoft YaHei`;
-                    ctx.fillStyle = this.getContrastColor(this.prizes[i].color);
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    
-                    // 绘制文字 - 注意：这里文字方向是沿着半径方向
-                    ctx.fillText(prizeName, textRadius, 0);
-                    
-                    // 恢复状态
-                    ctx.restore();
-                }
-                
-                // 绘制中心圆
-                ctx.beginPath();
-                ctx.arc(0, 0, 30, 0, 2 * Math.PI);
-                ctx.fillStyle = 'white';
-                ctx.fill();
-                ctx.strokeStyle = '#000';
-                ctx.lineWidth = 5;
-                ctx.stroke();
-                
-                // 绘制中心文字
-                ctx.fillStyle = '#333';
-                ctx.font = 'bold 20px Microsoft YaHei';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('GO', 0, 0);
-                
-                ctx.restore();
-            }
-            
-            getContrastColor(hexColor) {
-                if (!hexColor || hexColor.length < 7) return '#000';
-                
-                const r = parseInt(hexColor.substr(1, 2), 16);
-                const g = parseInt(hexColor.substr(3, 2), 16);
-                const b = parseInt(hexColor.substr(5, 2), 16);
-                const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-                return brightness > 128 ? '#000' : '#FFF';
-            }
-            
-            selectPrizeByWeight() {
-                // 永远返回神秘礼包（索引1）
-                return 1;
-            }
-            
-            startSpin() {
-                if (this.isSpinning) return;
-                
-                this.isSpinning = true;
-                this.spinBtn.disabled = true;
-                
-                // 隐藏结果框
-                this.resultEl.classList.remove('show');
-                
-                // 固定选择神秘礼包（索引1）
-                this.targetPrizeIndex = this.selectPrizeByWeight();
-                
-                // 重置到起始位置
-                this.rotation = this.startAngle;
-                
-                // 设置初始速度
-                const baseSpeed = 8 + Math.random() * 4;
-                this.spinSpeed = baseSpeed;
-                
-                this.spinStartTime = Date.now();
-                this.animate();
-            }
-            
-            animate() {
-                const currentTime = Date.now();
-                const elapsed = currentTime - this.spinStartTime;
-                const progress = Math.min(elapsed / this.spinDuration, 1);
-                
-                // 使用缓动函数
-                const easeOut = 1 - Math.pow(1 - progress, 3);
-                
-                // 计算从起始位置到目标位置需要旋转的总角度
-                // 我们需要逆时针旋转，所以角度为负数
-                // 总旋转 = 额外圈数(逆时针) + 目标角度与起始角度的差值
-                const extraRotations = 5; // 额外的5圈
-                
-                // 计算顺时针方向从"再来一次"到"神秘礼包"的角度差
-                const clockwiseAngleDiff = this.sectorDistance * this.angleStep;
-                
-                // 转换为逆时针旋转的角度（Canvas坐标系）
-                // 逆时针旋转角度 = 2π - 顺时针角度
-                const counterClockwiseAngleDiff = (2 * Math.PI) - clockwiseAngleDiff;
-                
-                // 总旋转角度 = 额外的逆时针圈数 + 逆时针角度差
-                const totalRotation = extraRotations * (2 * Math.PI) + counterClockwiseAngleDiff;
-                
-                // 应用缓动函数计算当前旋转角度
-                this.rotation = this.startAngle + (easeOut * totalRotation);
-                
-                // 重新绘制
-                this.drawWheel();
-                
-                // 检查是否完成
-                if (progress < 1) {
-                    this.animationId = requestAnimationFrame(() => this.animate());
-                } else {
-                    this.finishSpin();
-                }
-            }
-            
-            finishSpin() {
-                this.isSpinning = false;
-                this.spinBtn.disabled = false;
-                
-                // 显示结果 - 固定显示神秘礼包
-                const selectedPrize = this.prizes[1]; // 直接使用索引1
-                const fullName = '神秘大礼包'; // 固定显示完整名称
-                
-                this.resultEl.textContent = `🎉 ${fullName}`;
-                this.resultEl.style.background = selectedPrize.color;
-                this.resultEl.classList.add('show');
-                
-                // 延迟800毫秒后显示确认框
-                setTimeout(() => {
-                    this.showConfirmDialog(fullName);
-                }, 800);
-            }
-            
-            showConfirmDialog(prizeName) {
-                // 清除所有现有的确认框
-                this.clearConfirmBoxes();
-                
-                // 创建第一个确认框
-                this.createConfirmBox(prizeName, 0);
-            }
-            
-            createConfirmBox(prizeName, index) {
-                // 创建确认框元素
-                const confirmBox = document.createElement('div');
-                confirmBox.className = 'stacked-confirm';
-                confirmBox.dataset.index = index;
-                
-                // 设置确认框内容
-                confirmBox.innerHTML = `
-                    <div class="confirm-title">🎉 恭喜中奖！</div>
-                    <div class="confirm-message">您抽中了：${prizeName}！<br>是否立即领取？</div>
-                    <div class="confirm-buttons">
-                        <button class="confirm-btn confirm-yes">是，立即领取</button>
-                        <button class="confirm-btn confirm-no">否，暂不领取</button>
-                    </div>
-                `;
-                
-                // 添加到堆叠容器
-                this.confirmStack.appendChild(confirmBox);
-                
-                // 存储到数组
-                this.confirmBoxes.push(confirmBox);
-                
-                // 设置当前激活的确认框索引
-                this.currentConfirmIndex = index;
-                
-                // 延迟显示确认框
-                setTimeout(() => {
-                    confirmBox.classList.add('active');
-                }, 50);
-                
-                // 绑定按钮事件
-                const yesBtn = confirmBox.querySelector('.confirm-yes');
-                const noBtn = confirmBox.querySelector('.confirm-no');
-                
-                yesBtn.addEventListener('click', () => {
-                    this.handleConfirm(true, index);
-                });
-                
-                noBtn.addEventListener('click', () => {
-                    this.handleConfirm(false, index);
-                });
-            }
-            
-            handleConfirm(confirmed, index) {
-                if (confirmed) {
-                    // 用户点击"是"，跳转到目标网页
-                    window.location.href = 'https://xn--wbv461i.fxgqc.top/';
-                } else {
-                    // 用户点击"否"，将当前确认框标记为历史记录
-                    const currentBox = this.confirmBoxes[index];
-                    if (currentBox) {
-                        currentBox.classList.add('history');
+            document.getElementById('previewCard').style.display = 'block';
+            document.getElementById('sortRefCard').style.display = 'block';
+            toast('解析完成');
+        } catch(e) { console.error(e); toast('解析失败'); }
+        event.target.value = '';
+    }
+
+    function parseAllTables(xmlStr) {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlStr, 'text/xml');
+        const tbls = xmlDoc.getElementsByTagNameNS('*', 'tbl');
+        const tables = [];
+        for (let tbl of tbls) {
+            const rows = tbl.getElementsByTagNameNS('*', 'tr');
+            const table = [];
+            for (let row of rows) {
+                const cells = row.getElementsByTagNameNS('*', 'tc');
+                const rowData = [];
+                for (let cell of cells) {
+                    let text = '';
+                    const ps = cell.getElementsByTagNameNS('*', 'p');
+                    for (let p of ps) {
+                        const rs = p.getElementsByTagNameNS('*', 'r');
+                        for (let r of rs) {
+                            const t = r.getElementsByTagNameNS('*', 't')[0];
+                            if (t) text += t.textContent;
+                        }
                     }
-                    
-                    // 创建新的确认框（索引+1）
-                    const fullName = '神秘大礼包';
-                    this.createConfirmBox(fullName, index + 1);
+                    rowData.push({ text: text.trim(), xmlCell: cell });
                 }
+                table.push(rowData);
             }
-            
-            clearConfirmBoxes() {
-                // 移除所有确认框
-                while (this.confirmStack.firstChild) {
-                    this.confirmStack.removeChild(this.confirmStack.firstChild);
-                }
-                
-                // 清空数组
-                this.confirmBoxes = [];
-                this.currentConfirmIndex = 0;
+            tables.push({ rows: table });
+        }
+        return tables;
+    }
+
+    function populateSelect(sel, count) {
+        sel.innerHTML = '';
+        for (let i = 0; i < count; i++) sel.innerHTML += `<option value="${i}">表格${i+1}</option>`;
+    }
+
+    function renderTable(container, table, type) {
+        container.innerHTML = '';
+        const tbl = document.createElement('table');
+        tbl.className = 'table-preview';
+        const colCount = table.rows[0]?.length || 0;
+        const hRow = document.createElement('tr');
+        hRow.innerHTML = '<th></th>';
+        for (let j = 0; j < colCount; j++) {
+            const th = document.createElement('th');
+            th.textContent = String.fromCharCode(65 + j);
+            th.addEventListener('click', (e) => {
+                e.stopPropagation();
+                handleColumnClick(type, j, e);
+            });
+            hRow.appendChild(th);
+        }
+        tbl.appendChild(hRow);
+        for (let i = 0; i < table.rows.length; i++) {
+            const tr = document.createElement('tr');
+            const rh = document.createElement('th');
+            rh.className = 'row-header'; rh.textContent = i + 1;
+            tr.appendChild(rh);
+            for (let j = 0; j < table.rows[i].length; j++) {
+                const td = document.createElement('td');
+                td.textContent = table.rows[i][j].text;
+                td.dataset.row = i; td.dataset.col = j;
+                td.addEventListener('mousedown', (e) => startBoxSelect(e, type, container));
+                td.addEventListener('mousemove', (e) => updateBoxSelect(e, type));
+                tr.appendChild(td);
             }
-            
-            createSparkles() {
-                // 创建背景闪烁效果
-                for (let i = 0; i < 30; i++) {
-                    const sparkle = document.createElement('div');
-                    sparkle.className = 'sparkle';
-                    sparkle.style.left = `${Math.random() * 100}vw`;
-                    sparkle.style.top = `${Math.random() * 100}vh`;
-                    sparkle.style.animationDelay = `${Math.random() * 2}s`;
-                    sparkle.style.opacity = Math.random() * 0.5 + 0.2;
-                    document.body.appendChild(sparkle);
+            tbl.appendChild(tr);
+        }
+        container.appendChild(tbl);
+        highlightCells(container, type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells);
+    }
+
+    function handleColumnClick(type, col, event) {
+        const ctrl = event.ctrlKey || event.metaKey;
+        const wrapper = type === 'source' ? sourcePreview : type === 'target' ? targetPreview : refPreview;
+        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
+        const tables = type === 'source' ? sourceTables : type === 'target' ? targetTables : refTables;
+        const index = type === 'source' ? srcIdx : type === 'target' ? tgtIdx : refIdx;
+        const table = tables[index];
+        if (!ctrl) cells.clear();
+        for (let r = 0; r < table.rows.length; r++) {
+            if (col < table.rows[r].length) cells.add(`${r}-${col}`);
+        }
+        highlightCells(wrapper, cells);
+    }
+
+    function startBoxSelect(e, type, wrapper) {
+        if (!e.target.matches('td')) return;
+        e.preventDefault();
+        isSelecting = true;
+        currentType = type;
+        lastClientY = e.clientY;
+        const ctrl = e.ctrlKey || e.metaKey;
+        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
+        if (!ctrl) cells.clear();
+        const row = +e.target.dataset.row, col = +e.target.dataset.col;
+        cells.add(`${row}-${col}`);
+        highlightCells(wrapper, cells);
+    }
+
+    function updateBoxSelect(e, type) {
+        if (!isSelecting || currentType !== type || !e.target.matches('td')) return;
+        const deltaY = e.clientY - lastClientY;
+        lastClientY = e.clientY;
+        const wrapper = type === 'source' ? sourcePreview : type === 'target' ? targetPreview : refPreview;
+        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
+        const row = +e.target.dataset.row, col = +e.target.dataset.col;
+        const key = `${row}-${col}`;
+        if (deltaY > 0) {
+            cells.add(key);
+            wrapper.scrollTop += 8;
+        } else if (deltaY < 0) {
+            cells.delete(key);
+            wrapper.scrollTop -= 8;
+        }
+        highlightCells(wrapper, cells);
+    }
+
+    window.addEventListener('mouseup', () => { isSelecting = false; });
+
+    function highlightCells(wrapper, cells) {
+        wrapper.querySelectorAll('td').forEach(td => {
+            const key = `${td.dataset.row}-${td.dataset.col}`;
+            td.classList.toggle('selected', cells.has(key));
+        });
+    }
+
+    clearSelBtn.addEventListener('click', () => {
+        sourceCells.clear(); targetCells.clear(); refCells.clear();
+        [sourcePreview, targetPreview, refPreview].forEach(w => highlightCells(w, new Set()));
+    });
+
+    sourceTableSel.addEventListener('change', () => { srcIdx = +sourceTableSel.value; sourceCells.clear(); renderTable(sourcePreview, sourceTables[srcIdx], 'source'); });
+    targetTableSel.addEventListener('change', () => { tgtIdx = +targetTableSel.value; targetCells.clear(); renderTable(targetPreview, targetTables[tgtIdx], 'target'); });
+
+    extractBtn.addEventListener('click', () => {
+        if (!sourceCells.size) return toast('请在源表格框选区域');
+        const table = sourceTables[srcIdx].rows;
+        extractedData = [];
+        const sortedKeys = [...sourceCells].map(k => k.split('-').map(Number)).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
+        for (let [r,c] of sortedKeys) {
+            if (r < table.length && c < table[r].length) {
+                const txt = table[r][c].text;
+                if (txt) extractedData.push(txt);
+            }
+        }
+        if (!extractedData.length) return toast('所选区域无文本');
+        originalData = [...extractedData];
+        sortedData = [...extractedData];
+        renderSortList();
+        document.getElementById('sortCard').style.display = 'block';
+        info.textContent = `已提取 ${extractedData.length} 条`;
+        updateExportButton();
+    });
+
+    // 编辑项目函数
+    function editItem(index) {
+        const oldValue = sortedData[index];
+        const newValue = prompt('修改数据项内容：', oldValue);
+        if (newValue !== null) {
+            sortedData[index] = newValue.trim();
+            renderSortList();
+            toast('已更新数据项');
+        }
+    }
+
+    function renderSortList() {
+        sortListEl.innerHTML = '';
+        sortedData.forEach((item, idx) => {
+            const li = document.createElement('li');
+            li.className = 'sort-item';
+            if (item === '') li.classList.add('empty-slot');
+            li.draggable = true;
+            li.dataset.index = idx;
+            li.innerHTML = `
+                <span class="drag-handle">☰</span>
+                <span class="item-text" ondblclick="this.closest('.sort-item').querySelector('.edit-btn').click()">${item === '' ? '（空）' : item}</span>
+                <button class="edit-btn" data-index="${idx}">✏️ 编辑</button>
+            `;
+            li.querySelector('.edit-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                editItem(idx);
+            });
+            li.addEventListener('dragstart', handleDragStart);
+            li.addEventListener('dragover', e => e.preventDefault());
+            li.addEventListener('drop', handleDrop);
+            sortListEl.appendChild(li);
+        });
+        updateExportButton();
+    }
+
+    let dragSrcIndex = null;
+    function handleDragStart(e) {
+        dragSrcIndex = +this.dataset.index;
+        e.dataTransfer.effectAllowed = 'move';
+    }
+    function handleDrop(e) {
+        e.preventDefault();
+        const targetIndex = +this.dataset.index;
+        if (dragSrcIndex === null || targetIndex === dragSrcIndex) return;
+        const srcItem = sortedData[dragSrcIndex];
+        const targetItem = sortedData[targetIndex];
+        if (targetItem === '' && srcItem !== '') {
+            sortedData[targetIndex] = srcItem;
+            sortedData.splice(dragSrcIndex, 1);
+        } else {
+            [sortedData[dragSrcIndex], sortedData[targetIndex]] = [sortedData[targetIndex], sortedData[dragSrcIndex]];
+        }
+        renderSortList();
+        dragSrcIndex = null;
+    }
+
+    async function handleRefUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const ext = file.name.split('.').pop().toLowerCase();
+        refName.textContent = file.name;
+        try {
+            if (ext === 'xlsx') {
+                const buf = await file.arrayBuffer();
+                const wb = XLSX.read(buf, {type:'array'});
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+                refTables = [{ rows: rows.map(row => row.map(t => ({ text: String(t).trim() }))) }];
+            } else if (ext === 'docx') {
+                const zip = await JSZip.loadAsync(file);
+                const xml = await zip.file('word/document.xml')?.async('string');
+                refTables = parseAllTables(xml);
+            }
+            document.getElementById('refPreviewArea').style.display = 'block';
+            populateSelect(refTableSel, refTables.length);
+            renderTable(refPreview, refTables[0], 'ref');
+            toast('依据文档解析完成');
+        } catch(e) { toast('解析失败'); }
+        event.target.value = '';
+    }
+
+    refTableSel.addEventListener('change', () => { refIdx = +refTableSel.value; refCells.clear(); renderTable(refPreview, refTables[refIdx], 'ref'); });
+
+    function getRefPairs() {
+        const refTable = refTables[refIdx].rows;
+        const sortedKeys = [...refCells].map(k => k.split('-').map(Number)).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
+        const rowMap = new Map();
+        for (let [r,c] of sortedKeys) {
+            if (!rowMap.has(r)) rowMap.set(r, []);
+            rowMap.get(r).push(c);
+        }
+        const pairs = [];
+        for (let [r, cols] of rowMap) {
+            cols.sort((a,b)=>a-b);
+            if (cols.length >= 2) {
+                const c1 = cols[0], c2 = cols[1];
+                if (r < refTable.length && c1 < refTable[r].length && c2 < refTable[r].length) {
+                    const seq = parseFloat(refTable[r][c1].text);
+                    const name = refTable[r][c2].text;
+                    if (!isNaN(seq) && name) pairs.push({ seq, name });
                 }
             }
         }
-        
-        // 初始化转盘
-        const lotteryWheel = new SimpleLotteryWheel();
-    </script>
+        return pairs;
+    }
+
+    applySortBtn.addEventListener('click', performExactSort);
+
+    function performExactSort() {
+        if (!refCells.size) return toast('请框选依据区域');
+        if (!sortedData.length) return toast('请先提取源数据');
+        const pairs = getRefPairs();
+        if (!pairs.length) return toast('所选区域无法构成两列');
+        pairs.sort((a,b) => a.seq - b.seq);
+        const matched = [];
+        const unmatched = [];
+        const used = new Set();
+        pairs.forEach(p => {
+            const idx = sortedData.indexOf(p.name);
+            if (idx !== -1 && !used.has(p.name)) {
+                matched.push(p.name);
+                used.add(p.name);
+            } else {
+                matched.push('');
+            }
+        });
+        sortedData.forEach(item => {
+            if (!used.has(item)) unmatched.push(item);
+        });
+        sortedData = [...matched, ...unmatched];
+        renderSortList();
+        const emptyCount = matched.filter(i => i === '').length;
+        refStatus.textContent = `精确匹配：留出 ${emptyCount} 个空位，${unmatched.length} 条未匹配排至末尾`;
+    }
+
+    function performFuzzySort(threshold) {
+        if (!refCells.size) return toast('请框选依据区域');
+        if (!sortedData.length) return toast('请先提取源数据');
+        const pairs = getRefPairs();
+        if (!pairs.length) return toast('所选区域无法构成两列');
+        pairs.sort((a,b) => a.seq - b.seq);
+        const available = [...sortedData];
+        const used = new Set();
+        const matched = [];
+        const unmatched = [];
+        pairs.forEach(p => {
+            let bestIdx = -1;
+            let bestSim = 0;
+            for (let i = 0; i < available.length; i++) {
+                if (used.has(i)) continue;
+                const sim = similarity(available[i], p.name);
+                if (sim > bestSim) {
+                    bestSim = sim;
+                    bestIdx = i;
+                }
+            }
+            if (bestIdx !== -1 && bestSim >= threshold) {
+                matched.push(available[bestIdx]);
+                used.add(bestIdx);
+            } else {
+                matched.push('');
+            }
+        });
+        available.forEach((item, i) => {
+            if (!used.has(i)) unmatched.push(item);
+        });
+        sortedData = [...matched, ...unmatched];
+        renderSortList();
+        const emptyCount = matched.filter(i => i === '').length;
+        const percent = Math.round(threshold * 100);
+        refStatus.textContent = `模糊匹配≥${percent}%：留出 ${emptyCount} 个空位，${unmatched.length} 条未匹配排至末尾`;
+        toast(`模糊匹配≥${percent}%完成：${matched.length - emptyCount} 条匹配`);
+    }
+
+    fuzzySort90Btn.addEventListener('click', () => performFuzzySort(0.9));
+    fuzzySort75Btn.addEventListener('click', () => performFuzzySort(0.75));
+    fuzzyCustomBtn.addEventListener('click', () => {
+        let val = parseInt(fuzzyThreshold.value, 10);
+        if (isNaN(val) || val < 20 || val > 95) {
+            toast('相似度阈值需在20-95之间');
+            return;
+        }
+        performFuzzySort(val / 100);
+    });
+
+    function similarity(a, b) {
+        if (!a && !b) return 1;
+        if (!a || !b) return 0;
+        const maxLen = Math.max(a.length, b.length);
+        if (maxLen === 0) return 1;
+        const dist = editDistance(a, b);
+        return 1 - dist / maxLen;
+    }
+
+    function editDistance(s1, s2) {
+        s1 = s1.toLowerCase();
+        s2 = s2.toLowerCase();
+        const len1 = s1.length, len2 = s2.length;
+        const matrix = [];
+        for (let i = 0; i <= len1; i++) matrix[i] = [i];
+        for (let j = 0; j <= len2; j++) matrix[0][j] = j;
+        for (let i = 1; i <= len1; i++) {
+            for (let j = 1; j <= len2; j++) {
+                if (s1.charAt(i - 1) === s2.charAt(j - 1)) {
+                    matrix[i][j] = matrix[i - 1][j - 1];
+                } else {
+                    matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
+                }
+            }
+        }
+        return matrix[len1][len2];
+    }
+
+    resetBtn.addEventListener('click', () => { sortedData = [...originalData]; renderSortList(); });
+
+    exportBtn.addEventListener('click', async () => {
+        if (!targetZip || !targetXml) return toast('缺失目标文档');
+        if (!sortedData.length) return toast('无排序数据');
+        if (!targetCells.size) return toast('请框选目标替换区域');
+
+        const finalData = [...sortedData];
+        const table = targetTables[tgtIdx];
+        const sortedKeys = [...targetCells].map(k => k.split('-').map(Number)).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
+
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(targetXml, 'text/xml');
+        const tbls = xmlDoc.getElementsByTagNameNS('*', 'tbl');
+        const tbl = tbls[tgtIdx];
+        const trs = tbl.getElementsByTagNameNS('*', 'tr');
+        let idx = 0;
+        for (let [r,c] of sortedKeys) {
+            if (idx >= finalData.length) break;
+            if (r < trs.length) {
+                const tcs = trs[r].getElementsByTagNameNS('*', 'tc');
+                if (c < tcs.length) {
+                    setCellText(tcs[c], finalData[idx++]);
+                }
+            }
+        }
+
+        const serializer = new XMLSerializer();
+        const newXml = serializer.serializeToString(xmlDoc);
+        targetZip.file('word/document.xml', newXml);
+        const blob = await targetZip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+        const fileName = (exportFileName.value.trim() || '排序替换结果') + '.docx';
+        const file = new File([blob], fileName, {type: blob.type});
+
+        if (navigator.share && navigator.canShare && navigator.canShare({files: [file]})) {
+            try {
+                await navigator.share({ title: fileName, files: [file] });
+                toast('分享面板已打开，请选择微信或QQ');
+            } catch (err) {
+                if (err.name !== 'AbortError') downloadFile(blob, fileName);
+            }
+        } else {
+            downloadFile(blob, fileName);
+        }
+    });
+
+    function downloadFile(blob, fileName) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast('下载已开始，请在微信/QQ中手动发送文件');
+    }
+
+    function setCellText(cellXml, newText) {
+        const ps = cellXml.getElementsByTagNameNS('*', 'p');
+        if (ps.length) {
+            const p = ps[0];
+            while (p.firstChild) p.removeChild(p.firstChild);
+            const doc = p.ownerDocument;
+            const r = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'r');
+            const t = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 't');
+            t.setAttribute('xml:space','preserve');
+            t.textContent = newText;
+            r.appendChild(t); p.appendChild(r);
+            for (let i=1; i<ps.length; i++) ps[i].parentNode?.removeChild(ps[i]);
+        } else {
+            const doc = cellXml.ownerDocument;
+            const p = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'p');
+            const r = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'r');
+            const t = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 't');
+            t.textContent = newText;
+            r.appendChild(t); p.appendChild(r);
+            cellXml.appendChild(p);
+        }
+    }
+})();
+</script>
 </body>
 </html>
