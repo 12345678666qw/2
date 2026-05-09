@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>表格排序替换 · 坐标框选</title>
+    <title>表格排序替换 · 坐标框选 · 多列选择修复</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
@@ -47,14 +47,9 @@
             background: #fff; color: var(--primary); cursor: pointer; touch-action: manipulation;
         }
         .table-preview-wrapper {
-            overflow: auto;          /* 允许水平和垂直滚动 */
-            max-height: 300px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            user-select: none;
-            -webkit-overflow-scrolling: touch; /* iOS流畅滚动 */
-            touch-action: pan-x pan-y; /* 允许浏览器处理双指手势，但保留单指框选 */
-            position: relative;
+            overflow: auto; max-height: 300px; border: 1px solid var(--border);
+            border-radius: 8px; user-select: none; -webkit-overflow-scrolling: touch;
+            touch-action: pan-x pan-y; position: relative;
         }
         .table-preview {
             border-collapse: collapse; width: max-content; min-width: 100%; font-size: 0.8rem;
@@ -68,21 +63,18 @@
 
         .sort-list {
             list-style: none; max-height: 250px; overflow-y: auto;
-            border: 1px solid var(--border); border-radius: 8px;
-            -webkit-overflow-scrolling: touch;
+            border: 1px solid var(--border); border-radius: 8px; -webkit-overflow-scrolling: touch;
         }
         .sort-item {
             display: flex; align-items: center; gap: 10px; padding: 8px 12px;
-            background: #fff; border-bottom: 1px solid #f1f5f9; cursor: grab;
-            touch-action: none;
+            background: #fff; border-bottom: 1px solid #f1f5f9; cursor: grab; touch-action: none;
         }
         .sort-item.empty-slot { color: #94a3b8; font-style: italic; }
         .sort-item .drag-handle { color: #94a3b8; cursor: grab; }
         .sort-item .item-text { flex: 1; font-size: 0.9rem; user-select: none; }
         .sort-item .edit-btn {
             background: none; border: 1px solid #cbd5e1; border-radius: 4px;
-            padding: 2px 6px; font-size: 0.8rem; cursor: pointer; color: #64748b;
-            touch-action: manipulation;
+            padding: 2px 6px; font-size: 0.8rem; cursor: pointer; color: #64748b; touch-action: manipulation;
         }
         .sort-item .edit-btn:hover { background: #f1f5f9; color: #1e293b; }
 
@@ -99,8 +91,7 @@
         .toast {
             position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px);
             background: #1e293b; color: #fff; padding: 12px 24px; border-radius: 30px;
-            font-size: 0.85rem; z-index: 999; transition: 0.3s; pointer-events: none;
-            white-space: nowrap;
+            font-size: 0.85rem; z-index: 999; transition: 0.3s; pointer-events: none; white-space: nowrap;
         }
         .toast.show { transform: translateX(-50%) translateY(0); }
         .export-inline {
@@ -122,7 +113,7 @@
     <div style="text-align:center; padding:8px 0;">
         <span style="font-size:32px;">📄⚡📊⚡📄</span>
         <h2 style="font-size:1.4rem;">表格排序替换 · 坐标框选</h2>
-        <p style="color:#64748b;">框选/坐标/点击列头，编辑并导出</p>
+        <p style="color:#64748b;">框选/坐标/点击列头，排序依据可多选列</p>
     </div>
 
     <!-- 上传 -->
@@ -176,7 +167,7 @@
 
     <!-- 排序依据 -->
     <div class="card" id="sortRefCard" style="display:none;">
-        <h3>📊 排序依据 (Excel/Word) · 点击列头/框选/坐标</h3>
+        <h3>📊 排序依据 (Excel/Word) · 点击列头可多选，触摸累积选中</h3>
         <div class="upload-row" style="margin-bottom:12px;">
             <div class="upload-box" id="refBox">
                 <span class="icon">📋</span><p>排序依据文档</p>
@@ -240,6 +231,7 @@
     let currentType = null;
     let lastClientX = null, lastClientY = null;
     let isSelecting = false;
+    let touchDeleteMode = false; // 用于依据表格触摸框选时的删除模式
 
     const sourceFile = document.getElementById('sourceFile');
     const targetFile = document.getElementById('targetFile');
@@ -268,7 +260,6 @@
     const toastEl = document.getElementById('toast');
     const refStatus = document.getElementById('refStatus');
 
-    // 坐标输入元素
     const sourceCoordInput = document.getElementById('sourceCoordInput');
     const targetCoordInput = document.getElementById('targetCoordInput');
     const refCoordInput = document.getElementById('refCoordInput');
@@ -286,7 +277,7 @@
         exportBtn.disabled = !sortedData.length || !targetCells.size;
     }
 
-    // 上传区域点击
+    // 上传
     document.getElementById('sourceBox').addEventListener('click', ()=> sourceFile.click());
     document.getElementById('targetBox').addEventListener('click', ()=> targetFile.click());
     document.getElementById('refBox').addEventListener('click', ()=> refFile.click());
@@ -367,7 +358,6 @@
         for (let i = 0; i < count; i++) sel.innerHTML += `<option value="${i}">表格${i+1}</option>`;
     }
 
-    // 坐标解析函数
     function colLetterToIndex(letter) {
         let col = 0;
         for (let i = 0; i < letter.length; i++) {
@@ -379,8 +369,6 @@
     function parseCoordInput(inputStr, table) {
         const result = new Set();
         if (!inputStr.trim()) return result;
-
-        // 区域格式 A1:B3 或 A1..B3
         const rangeMatch = inputStr.match(/^([A-Z]+)(\d+)[:.]{1,2}([A-Z]+)(\d+)$/i);
         if (rangeMatch) {
             const colStart = colLetterToIndex(rangeMatch[1]);
@@ -390,15 +378,11 @@
             if (colStart === -1 || colEnd === -1 || isNaN(rowStart) || isNaN(rowEnd)) return result;
             for (let r = Math.min(rowStart, rowEnd); r <= Math.max(rowStart, rowEnd); r++) {
                 for (let c = Math.min(colStart, colEnd); c <= Math.max(colStart, colEnd); c++) {
-                    if (r < table.rows.length && c < table.rows[r].length) {
-                        result.add(`${r}-${c}`);
-                    }
+                    if (r < table.rows.length && c < table.rows[r].length) result.add(`${r}-${c}`);
                 }
             }
             return result;
         }
-
-        // 逗号分隔的列或单元格
         const parts = inputStr.split(/[,，]+/);
         parts.forEach(part => {
             part = part.trim().toUpperCase();
@@ -429,17 +413,13 @@
         if (!tables.length) return toast('请先上传文档');
         const table = tables[index];
         const newCells = parseCoordInput(inputEl.value, table);
-        if (newCells.size === 0) {
-            toast('坐标格式无效或区域为空');
-            return;
-        }
+        if (newCells.size === 0) { toast('坐标格式无效或区域为空'); return; }
         cells.clear();
         newCells.forEach(key => cells.add(key));
         highlightCells(wrapper, cells);
         toast(`已选中 ${cells.size} 个单元格`);
     }
 
-    // 绑定坐标按钮和回车事件
     sourceCoordBtn.addEventListener('click', () => applyCoordSelection('source'));
     targetCoordBtn.addEventListener('click', () => applyCoordSelection('target'));
     refCoordBtn.addEventListener('click', () => applyCoordSelection('ref'));
@@ -459,7 +439,7 @@
             th.textContent = String.fromCharCode(65 + j);
             th.addEventListener('click', (e) => {
                 e.stopPropagation();
-                handleColumnClick(type, j, e.ctrlKey || e.metaKey);
+                handleColumnClick(type, j, e.ctrlKey || e.metaKey || type === 'ref');
             });
             hRow.appendChild(th);
         }
@@ -473,10 +453,8 @@
                 const td = document.createElement('td');
                 td.textContent = table.rows[i][j].text;
                 td.dataset.row = i; td.dataset.col = j;
-                // 鼠标事件
                 td.addEventListener('mousedown', (e) => startBoxSelect(e, type, container));
                 td.addEventListener('mousemove', (e) => updateBoxSelect(e, type));
-                // 触摸事件
                 td.addEventListener('touchstart', (e) => touchStartBox(e, type, container), {passive: false});
                 td.addEventListener('touchmove', (e) => touchMoveBox(e, type), {passive: false});
                 tr.appendChild(td);
@@ -487,15 +465,27 @@
         highlightCells(container, type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells);
     }
 
+    // 列头点击处理（依据表格支持切换整列）
     function handleColumnClick(type, col, multiSelect) {
         const wrapper = type === 'source' ? sourcePreview : type === 'target' ? targetPreview : refPreview;
         const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
         const tables = type === 'source' ? sourceTables : type === 'target' ? targetTables : refTables;
         const index = type === 'source' ? srcIdx : type === 'target' ? tgtIdx : refIdx;
         const table = tables[index];
-        if (!multiSelect) cells.clear();
-        for (let r = 0; r < table.rows.length; r++) {
-            if (col < table.rows[r].length) cells.add(`${r}-${col}`);
+        
+        if (type === 'ref') {
+            // 切换整列选中状态
+            const allSelected = Array.from({length: table.rows.length}, (_, r) => `${r}-${col}`).every(key => cells.has(key));
+            if (allSelected) {
+                for (let r = 0; r < table.rows.length; r++) cells.delete(`${r}-${col}`);
+            } else {
+                for (let r = 0; r < table.rows.length; r++) if (col < table.rows[r].length) cells.add(`${r}-${col}`);
+            }
+        } else {
+            if (!multiSelect) cells.clear();
+            for (let r = 0; r < table.rows.length; r++) {
+                if (col < table.rows[r].length) cells.add(`${r}-${col}`);
+            }
         }
         highlightCells(wrapper, cells);
     }
@@ -509,9 +499,20 @@
         lastClientY = e.clientY;
         const ctrl = e.ctrlKey || e.metaKey;
         const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
-        if (!ctrl) cells.clear();
+        if (type !== 'ref' && !ctrl) cells.clear();
         const row = +e.target.dataset.row, col = +e.target.dataset.col;
-        cells.add(`${row}-${col}`);
+        const key = `${row}-${col}`;
+        if (type === 'ref') {
+            if (cells.has(key)) {
+                cells.delete(key);
+                touchDeleteMode = true;
+            } else {
+                cells.add(key);
+                touchDeleteMode = false;
+            }
+        } else {
+            cells.add(key);
+        }
         highlightCells(wrapper, cells);
     }
 
@@ -526,17 +527,16 @@
         const row = +e.target.dataset.row, col = +e.target.dataset.col;
         const key = `${row}-${col}`;
         if (deltaY > 0) {
-            cells.add(key);
+            if (type !== 'ref' || !touchDeleteMode) cells.add(key);
+            else cells.delete(key);
             wrapper.scrollTop += 8;
         } else if (deltaY < 0) {
-            cells.delete(key);
+            if (type !== 'ref' || !touchDeleteMode) cells.delete(key);
+            else cells.add(key);
             wrapper.scrollTop -= 8;
         }
-        if (deltaX > 0) {
-            wrapper.scrollLeft += 8;
-        } else if (deltaX < 0) {
-            wrapper.scrollLeft -= 8;
-        }
+        if (deltaX > 0) wrapper.scrollLeft += 8;
+        else if (deltaX < 0) wrapper.scrollLeft -= 8;
         highlightCells(wrapper, cells);
     }
 
@@ -550,8 +550,21 @@
         lastClientX = touch.clientX;
         lastClientY = touch.clientY;
         const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
-        cells.clear();
-        cells.add(`${target.dataset.row}-${target.dataset.col}`);
+        const key = `${target.dataset.row}-${target.dataset.col}`;
+        
+        if (type === 'ref') {
+            // 依据表格：切换起始单元格，不清空已有选择
+            if (cells.has(key)) {
+                cells.delete(key);
+                touchDeleteMode = true;
+            } else {
+                cells.add(key);
+                touchDeleteMode = false;
+            }
+        } else {
+            cells.clear();
+            cells.add(key);
+        }
         highlightCells(wrapper, cells);
     }
 
@@ -568,23 +581,22 @@
         const wrapper = type === 'source' ? sourcePreview : type === 'target' ? targetPreview : refPreview;
         const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
         const key = `${target.dataset.row}-${target.dataset.col}`;
-        if (deltaY > 0) {
-            cells.add(key);
-            wrapper.scrollTop += 8;
-        } else if (deltaY < 0) {
+        
+        if (type === 'ref' && touchDeleteMode) {
             cells.delete(key);
-            wrapper.scrollTop -= 8;
+        } else {
+            if (deltaY > 0) cells.add(key);
+            else if (deltaY < 0) cells.delete(key);
         }
-        if (deltaX > 0) {
-            wrapper.scrollLeft += 8;
-        } else if (deltaX < 0) {
-            wrapper.scrollLeft -= 8;
-        }
+        if (deltaY > 0) wrapper.scrollTop += 8;
+        else if (deltaY < 0) wrapper.scrollTop -= 8;
+        if (deltaX > 0) wrapper.scrollLeft += 8;
+        else if (deltaX < 0) wrapper.scrollLeft -= 8;
         highlightCells(wrapper, cells);
     }
 
-    window.addEventListener('mouseup', () => { isSelecting = false; });
-    window.addEventListener('touchend', () => { isSelecting = false; });
+    window.addEventListener('mouseup', () => { isSelecting = false; touchDeleteMode = false; });
+    window.addEventListener('touchend', () => { isSelecting = false; touchDeleteMode = false; });
 
     function highlightCells(wrapper, cells) {
         wrapper.querySelectorAll('td').forEach(td => {
@@ -642,13 +654,10 @@
             li.dataset.index = idx;
             li.innerHTML = `
                 <span class="drag-handle">☰</span>
-                <span class="item-text" ondblclick="this.closest('.sort-item').querySelector('.edit-btn').click()">${item === '' ? '（空）' : item}</span>
+                <span class="item-text">${item === '' ? '（空）' : item}</span>
                 <button class="edit-btn" data-index="${idx}">✏️ 编辑</button>
             `;
-            li.querySelector('.edit-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                editItem(idx);
-            });
+            li.querySelector('.edit-btn').addEventListener('click', (e) => { e.stopPropagation(); editItem(idx); });
             li.addEventListener('dragstart', handleDragStart);
             li.addEventListener('dragover', e => e.preventDefault());
             li.addEventListener('drop', handleDrop);
@@ -661,10 +670,7 @@
     }
 
     let dragSrcIndex = null;
-    function handleDragStart(e) {
-        dragSrcIndex = +this.dataset.index;
-        e.dataTransfer.effectAllowed = 'move';
-    }
+    function handleDragStart(e) { dragSrcIndex = +this.dataset.index; e.dataTransfer.effectAllowed = 'move'; }
     function handleDrop(e) {
         e.preventDefault();
         const targetIndex = +this.dataset.index;
@@ -681,13 +687,13 @@
         dragSrcIndex = null;
     }
 
-    let touchDragItem = null, touchStartY = 0, touchPlaceholder = null, touchInitialIndex = -1;
+    let touchDragItem = null, touchStartY2 = 0, touchPlaceholder = null, touchInitialIndex = -1;
     function handleTouchDragStart(e) {
         if (e.target.tagName === 'BUTTON') return;
         touchDragItem = this;
         touchInitialIndex = +touchDragItem.dataset.index;
         const touch = e.touches[0];
-        touchStartY = touch.clientY;
+        touchStartY2 = touch.clientY;
         touchDragItem.style.opacity = '0.6';
         touchDragItem.style.background = '#e2e8f0';
         touchPlaceholder = document.createElement('li');
@@ -704,7 +710,7 @@
         if (!touchDragItem) return;
         e.preventDefault();
         const touch = e.touches[0];
-        const diffY = touch.clientY - touchStartY;
+        const diffY = touch.clientY - touchStartY2;
         touchDragItem.style.transform = `translateY(${diffY}px)`;
         const children = [...sortListEl.children].filter(c => c !== touchDragItem);
         let targetIdx = touchInitialIndex;
@@ -729,10 +735,7 @@
             const moved = sortedData.splice(touchInitialIndex, 1)[0];
             sortedData.splice(newIndex, 0, moved);
         }
-        if (touchPlaceholder) {
-            touchPlaceholder.remove();
-            touchPlaceholder = null;
-        }
+        if (touchPlaceholder) { touchPlaceholder.remove(); touchPlaceholder = null; }
         renderSortList();
         touchDragItem = null;
     }
@@ -801,12 +804,8 @@
         const matched = [], unmatched = [], used = new Set();
         pairs.forEach(p => {
             const idx = sortedData.indexOf(p.name);
-            if (idx !== -1 && !used.has(p.name)) {
-                matched.push(p.name);
-                used.add(p.name);
-            } else {
-                matched.push('');
-            }
+            if (idx !== -1 && !used.has(p.name)) { matched.push(p.name); used.add(p.name); }
+            else matched.push('');
         });
         sortedData.forEach(item => { if (!used.has(item)) unmatched.push(item); });
         sortedData = [...matched, ...unmatched];
@@ -829,12 +828,8 @@
                 const sim = similarity(available[i], p.name);
                 if (sim > bestSim) { bestSim = sim; bestIdx = i; }
             }
-            if (bestIdx !== -1 && bestSim >= threshold) {
-                matched.push(available[bestIdx]);
-                used.add(bestIdx);
-            } else {
-                matched.push('');
-            }
+            if (bestIdx !== -1 && bestSim >= threshold) { matched.push(available[bestIdx]); used.add(bestIdx); }
+            else matched.push('');
         });
         available.forEach((item, i) => { if (!used.has(i)) unmatched.push(item); });
         sortedData = [...matched, ...unmatched];
@@ -863,8 +858,7 @@
     }
 
     function editDistance(s1, s2) {
-        s1 = s1.toLowerCase();
-        s2 = s2.toLowerCase();
+        s1 = s1.toLowerCase(); s2 = s2.toLowerCase();
         const len1 = s1.length, len2 = s2.length;
         const matrix = [];
         for (let i = 0; i <= len1; i++) matrix[i] = [i];
@@ -902,9 +896,7 @@
             if (idx >= finalData.length) break;
             if (r < trs.length) {
                 const tcs = trs[r].getElementsByTagNameNS('*', 'tc');
-                if (c < tcs.length) {
-                    setCellText(tcs[c], finalData[idx++]);
-                }
+                if (c < tcs.length) setCellText(tcs[c], finalData[idx++]);
             }
         }
 
@@ -930,11 +922,8 @@
     function downloadFile(blob, fileName) {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        a.href = url; a.download = fileName;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
         URL.revokeObjectURL(url);
         toast('下载已开始，请在微信/QQ中手动发送文件');
     }
@@ -947,8 +936,7 @@
             const doc = p.ownerDocument;
             const r = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'r');
             const t = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 't');
-            t.setAttribute('xml:space','preserve');
-            t.textContent = newText;
+            t.setAttribute('xml:space','preserve'); t.textContent = newText;
             r.appendChild(t); p.appendChild(r);
             for (let i=1; i<ps.length; i++) ps[i].parentNode?.removeChild(ps[i]);
         } else {
@@ -956,9 +944,7 @@
             const p = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'p');
             const r = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'r');
             const t = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 't');
-            t.textContent = newText;
-            r.appendChild(t); p.appendChild(r);
-            cellXml.appendChild(p);
+            t.textContent = newText; r.appendChild(t); p.appendChild(r); cellXml.appendChild(p);
         }
     }
 })();
