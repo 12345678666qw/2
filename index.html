@@ -2,103 +2,110 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>表格排序替换</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>表格排序替换 · 微信/QQ直接上传</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
         :root {
             --bg: #f8fafc; --card-bg: #ffffff; --primary: #5b6af0;
             --success: #10b981; --text: #1e293b; --text-secondary: #64748b;
-            --border: #e2e8f0; --radius: 12px;
+            --border: #e2e8f0; --radius: 14px;
         }
         * { margin:0; padding:0; box-sizing:border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
-            background: var(--bg); color: var(--text); padding: 8px;
+            background: var(--bg); color: var(--text); padding: 10px;
             display: flex; justify-content: center; min-height: 100vh;
-            -webkit-tap-highlight-color: transparent;
+            -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none;
         }
         .container { width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 12px; }
         .card {
-            background: var(--card-bg); border-radius: var(--radius); padding: 12px;
-            border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            background: var(--card-bg); border-radius: var(--radius); padding: 14px 12px;
+            border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,0.04);
         }
-        h3 { font-size: 0.95rem; margin-bottom: 6px; }
-        .upload-row { display: flex; gap: 8px; flex-wrap: wrap; }
+        h3 { font-size: 0.95rem; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+        .upload-row { display: flex; gap: 10px; flex-wrap: wrap; }
         .upload-box {
-            flex: 1; min-width: 120px; border: 2px dashed #cbd5e1; border-radius: var(--radius);
-            padding: 14px 8px; text-align: center; cursor: pointer; background: #fafbfc; touch-action: manipulation;
-            -webkit-tap-highlight-color: transparent;
+            flex: 1; min-width: 130px; border: 2px dashed #b0c4de; border-radius: var(--radius);
+            padding: 18px 10px; text-align: center; cursor: pointer; background: #f9fafb;
+            transition: all 0.2s; touch-action: manipulation;
+            position: relative; overflow: hidden;
         }
         .upload-box:active { background: #eef2ff; border-color: var(--primary); }
-        .upload-box .icon { font-size: 28px; display: block; }
-        .upload-box p { font-size: 0.75rem; margin:4px 0 0; color:var(--text-secondary); }
-        .upload-box .file-name { font-size:0.7rem; color:var(--primary); margin-top:4px; font-weight:600; }
-        .upload-box input[type="file"] { display: none; }
+        .upload-box .icon { font-size: 32px; display: block; margin-bottom: 4px; }
+        .upload-box .title { font-size: 0.85rem; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+        .upload-box .desc { font-size: 0.7rem; color: #94a3b8; }
+        .upload-box .file-name { font-size:0.7rem; color: var(--primary); margin-top:6px; font-weight:600; word-break: break-all; }
+        .upload-box input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 
-        .table-toolbar { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
-        .table-toolbar select { padding: 6px 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 0.8rem; }
+        .table-toolbar { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+        .table-toolbar select { padding: 8px 10px; border-radius: 8px; border: 1px solid #ccc; font-size: 0.8rem; background: #fff; }
         .table-preview-wrapper {
-            overflow: auto; max-height: 250px; border: 1px solid var(--border);
-            border-radius: 8px; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y;
+            overflow: auto; max-height: 260px; border: 1px solid var(--border);
+            border-radius: 10px; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y;
         }
         .table-preview {
             border-collapse: collapse; width: max-content; min-width: 100%; font-size: 0.75rem;
         }
         .table-preview td, .table-preview th {
-            border: 1px solid #ddd; padding: 5px 6px; text-align: left; white-space: nowrap;
+            border: 1px solid #e2e8f0; padding: 6px 8px; text-align: left; white-space: nowrap;
         }
-        .table-preview th { background: #f1f5f9; cursor: pointer; }
+        .table-preview th { background: #f1f5f9; cursor: pointer; font-weight: 600; }
         .table-preview td.selected, .table-preview th.selected { background: #dbeafe !important; }
-        .row-header { cursor: pointer; min-width: 28px; text-align: center; }
+        .row-header { cursor: pointer; min-width: 32px; text-align: center; font-weight: 600; background: #f8fafc; }
 
         .sort-list {
-            list-style: none; max-height: 220px; overflow-y: auto;
-            border: 1px solid var(--border); border-radius: 8px;
+            list-style: none; max-height: 240px; overflow-y: auto;
+            border: 1px solid var(--border); border-radius: 10px;
             -webkit-overflow-scrolling: touch;
         }
         .sort-item {
-            display: flex; align-items: center; gap: 8px; padding: 10px 10px;
+            display: flex; align-items: center; gap: 10px; padding: 12px 10px;
             background: #fff; border-bottom: 1px solid #f1f5f9; touch-action: none;
-            transition: background 0.15s;
+            transition: background 0.15s; position: relative;
         }
         .sort-item.empty-slot { color: #94a3b8; font-style: italic; }
-        .sort-item .drag-handle { color: #94a3b8; font-size: 1.2rem; padding: 0 4px; }
+        .sort-item .drag-handle { color: #cbd5e1; font-size: 1.3rem; padding: 0 4px; touch-action: none; }
         .sort-item .item-text { flex: 1; font-size: 0.85rem; word-break: break-word; }
         .sort-item .edit-btn {
-            background: none; border: 1px solid #cbd5e1; border-radius: 4px;
-            padding: 3px 8px; font-size: 0.75rem; cursor: pointer; color: #64748b;
-            flex-shrink: 0;
+            background: #fff; border: 1px solid #e2e8f0; border-radius: 6px;
+            padding: 5px 10px; font-size: 0.75rem; cursor: pointer; color: #475569;
+            flex-shrink: 0; touch-action: manipulation;
         }
         .btn {
-            padding: 9px 14px; border: none; border-radius: 8px; font-size: 0.85rem;
+            padding: 10px 16px; border: none; border-radius: 10px; font-size: 0.85rem;
             font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
             transition: 0.2s; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.04);
         }
-        .btn:disabled { opacity: 0.5; }
+        .btn:disabled { opacity: 0.4; }
         .btn-primary { background: var(--primary); color: #fff; }
         .btn-success { background: var(--success); color: #fff; }
         .btn-outline { background: #fff; color: var(--primary); border: 2px solid var(--primary); }
-        .btn-sm { padding: 7px 12px; font-size: 0.8rem; }
+        .btn-sm { padding: 8px 14px; font-size: 0.8rem; }
+        .btn-xs { padding: 5px 10px; font-size: 0.7rem; border-radius: 6px; }
+
         .toast {
-            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px);
-            background: #1e293b; color: #fff; padding: 10px 20px; border-radius: 30px;
+            position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%) translateY(100px);
+            background: #1e293b; color: #fff; padding: 12px 22px; border-radius: 30px;
             font-size: 0.8rem; z-index: 999; pointer-events: none;
-            transition: transform 0.3s; white-space: nowrap;
+            transition: transform 0.3s ease; white-space: nowrap; box-shadow: 0 8px 20px rgba(0,0,0,0.2);
         }
         .toast.show { transform: translateX(-50%) translateY(0); }
+
         .export-inline {
-            display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: center;
+            display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center;
         }
         .export-inline input {
-            padding: 8px 10px; border: 2px solid var(--border); border-radius: 8px;
-            font-size: 0.85rem; width: 160px; max-width: 100%;
+            padding: 10px 12px; border: 2px solid var(--border); border-radius: 10px;
+            font-size: 0.85rem; width: 160px; max-width: 100%; background: #fff;
         }
-        .sort-btns { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+
+        .sort-btns { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
         .threshold-input {
-            width: 60px; padding: 6px; border: 2px solid var(--border); border-radius: 8px;
-            font-size: 0.8rem; text-align: center;
+            width: 65px; padding: 8px; border: 2px solid var(--border); border-radius: 8px;
+            font-size: 0.8rem; text-align: center; background: #fff;
         }
     </style>
 </head>
@@ -106,21 +113,25 @@
 <div class="container">
     <div style="text-align:center; padding:4px 0;">
         <span style="font-size:28px;">📄⚡📊⚡📄</span>
-        <h2 style="font-size:1.3rem;">表格排序替换</h2>
-        <p style="color:#64748b; font-size:0.8rem;">手机端触控框选、拖拽排序、导出分享</p>
+        <h2 style="font-size:1.3rem; margin-top:4px;">表格排序替换</h2>
+        <p style="color:#64748b; font-size:0.8rem;">微信/QQ直接上传文件，触摸框选拖拽</p>
     </div>
 
-    <!-- 上传 -->
+    <!-- 上传源文档和目标文档 -->
     <div class="card">
-        <h3>📤 上传源文档与目标文档 (.docx)</h3>
+        <h3>📤 1. 上传文档</h3>
         <div class="upload-row">
             <div class="upload-box" id="sourceBox">
-                <span class="icon">📎</span><p>源文档</p>
+                <span class="icon">📎</span>
+                <div class="title">源文档 (.docx)</div>
+                <div class="desc">从聊天记录选择</div>
                 <div class="file-name" id="sourceName"></div>
                 <input type="file" id="sourceFile" accept=".docx">
             </div>
             <div class="upload-box" id="targetBox">
-                <span class="icon">📌</span><p>目标文档</p>
+                <span class="icon">📌</span>
+                <div class="title">目标文档 (.docx)</div>
+                <div class="desc">从聊天记录选择</div>
                 <div class="file-name" id="targetName"></div>
                 <input type="file" id="targetFile" accept=".docx">
             </div>
@@ -129,82 +140,84 @@
 
     <!-- 表格预览与选择 -->
     <div class="card" id="previewCard" style="display:none;">
-        <h3>👁️ 源表格 & 目标表格 · 触摸滑动框选</h3>
+        <h3>👁️ 2. 框选区域 (下划选中，上划取消)</h3>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <div style="flex:1; min-width:250px;">
+            <div style="flex:1; min-width:240px;">
                 <div class="table-toolbar"><label>源表格</label><select id="sourceTableSel"></select></div>
                 <div class="table-preview-wrapper" id="sourcePreview"></div>
             </div>
-            <div style="flex:1; min-width:250px;">
+            <div style="flex:1; min-width:240px;">
                 <div class="table-toolbar"><label>目标表格</label><select id="targetTableSel"></select></div>
                 <div class="table-preview-wrapper" id="targetPreview"></div>
             </div>
         </div>
-        <div style="display:flex; gap:6px; margin-top:6px;">
-            <button class="btn btn-primary btn-sm" id="extractBtn">✅ 提取</button>
-            <button class="btn btn-outline btn-sm" id="clearSelBtn">🔄 清除</button>
+        <div style="display:flex; gap:6px; margin-top:8px;">
+            <button class="btn btn-primary btn-sm" id="extractBtn">✅ 提取数据</button>
+            <button class="btn btn-outline btn-sm" id="clearSelBtn">🔄 清除选择</button>
         </div>
     </div>
 
     <!-- 排序依据 -->
     <div class="card" id="sortRefCard" style="display:none;">
-        <h3>📊 排序依据 (Excel/Word)</h3>
+        <h3>📊 3. 排序依据</h3>
         <div class="upload-row" style="margin-bottom:8px;">
             <div class="upload-box" id="refBox">
-                <span class="icon">📋</span><p>依据文档</p>
+                <span class="icon">📋</span>
+                <div class="title">依据文档</div>
+                <div class="desc">.xlsx 或 .docx</div>
                 <div class="file-name" id="refName"></div>
                 <input type="file" id="refFile" accept=".xlsx,.docx">
             </div>
         </div>
         <div id="refPreviewArea" style="display:none;">
             <div class="table-toolbar"><label>表格</label><select id="refTableSel"></select></div>
-            <div class="table-preview-wrapper" id="refPreview" style="max-height:180px;"></div>
-            <div style="margin-top:6px;">
-                <div class="sort-btns">
-                    <button class="btn btn-sm btn-primary" id="applySortBtn">精确</button>
-                    <button class="btn btn-sm btn-outline" id="fuzzySort90Btn">90%</button>
-                    <button class="btn btn-sm btn-outline" id="fuzzySort75Btn">75%</button>
-                    <input type="number" id="fuzzyThreshold" class="threshold-input" value="90" min="20" max="95" step="1">
-                    <span style="font-size:0.7rem;">%</span>
-                    <button class="btn btn-sm btn-outline" id="fuzzyCustomBtn">自定义</button>
-                </div>
-                <span id="refStatus" style="font-size:0.7rem; color:#64748b; margin-top:3px; display:inline-block;"></span>
+            <div class="table-preview-wrapper" id="refPreview" style="max-height:160px;"></div>
+            <div class="sort-btns">
+                <button class="btn btn-sm btn-outline" id="applySortBtn">精确匹配</button>
+                <button class="btn btn-sm btn-outline" id="fuzzySort90Btn">90%</button>
+                <button class="btn btn-sm btn-outline" id="fuzzySort75Btn">75%</button>
+                <input type="number" id="fuzzyThreshold" class="threshold-input" value="90" min="20" max="95" step="1">
+                <span style="font-size:0.7rem;">%</span>
+                <button class="btn btn-sm btn-outline" id="fuzzyCustomBtn">自定义</button>
             </div>
+            <span id="refStatus" style="font-size:0.7rem; color:#64748b; margin-top:4px; display:block;"></span>
         </div>
     </div>
 
     <!-- 排序列表 -->
     <div class="card" id="sortCard" style="display:none;">
-        <h3>📋 排序列表（长按拖拽、点击编辑）</h3>
-        <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3>📋 4. 排序列表（长按拖拽，点✏️编辑）</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
             <span id="info"></span>
-            <button class="btn btn-sm btn-outline" id="resetBtn">恢复</button>
+            <button class="btn btn-sm btn-outline" id="resetBtn">恢复原始</button>
         </div>
         <ul class="sort-list" id="sortList"></ul>
     </div>
 
     <!-- 导出 -->
     <div class="card" id="exportCard">
-        <h3>📤 导出并分享</h3>
+        <h3>📤 5. 导出</h3>
         <div class="export-inline">
             <input type="text" id="exportFileName" value="排序替换结果" placeholder="文件名">
-            <button class="btn btn-success" id="exportBtn" disabled>📄 导出分享</button>
+            <button class="btn btn-success" id="exportBtn" disabled>📄 导出并分享</button>
         </div>
+        <p style="font-size:0.7rem; color:#94a3b8; margin-top:6px;">空位将清空单元格。导出后直接分享到微信/QQ。</p>
     </div>
 </div>
 <div class="toast" id="toast"></div>
 
 <script>
 (() => {
+    // ---------- 状态变量 ----------
     let sourceZip, targetZip, sourceXml, targetXml;
     let sourceTables = [], targetTables = [], refTables = [];
     let srcIdx = 0, tgtIdx = 0, refIdx = 0;
     let sourceCells = new Set(), targetCells = new Set(), refCells = new Set();
     let extractedData = [], sortedData = [], originalData = [];
     let currentType = null;
-    let isSelecting = false;
-    let lastTouchY = null;
+    let isSelecting = false, lastTouchY = null;
 
+    // DOM 元素
     const sourceFile = document.getElementById('sourceFile');
     const targetFile = document.getElementById('targetFile');
     const refFile = document.getElementById('refFile');
@@ -237,43 +250,40 @@
         toastEl.classList.add('show');
         setTimeout(() => toastEl.classList.remove('show'), 2000);
     }
-
     function updateExportButton() {
         exportBtn.disabled = !sortedData.length || !targetCells.size;
     }
 
-    // 上传事件
-    document.getElementById('sourceBox').addEventListener('click', ()=> sourceFile.click());
-    document.getElementById('targetBox').addEventListener('click', ()=> targetFile.click());
-    document.getElementById('refBox').addEventListener('click', ()=> refFile.click());
-
+    // ---------- 文件选择监听 ----------
     sourceFile.addEventListener('change', e => handleDoc(e, 'source'));
     targetFile.addEventListener('change', e => handleDoc(e, 'target'));
     refFile.addEventListener('change', e => handleRefUpload(e));
 
     async function handleDoc(event, type) {
         const file = event.target.files[0];
-        if (!file?.name.endsWith('.docx')) { toast('请上传 .docx'); return; }
-        toast('解析中...');
+        if (!file || !file.name.endsWith('.docx')) { toast('请选择 .docx 文件'); return; }
+        toast('解析文档中...');
         try {
             const zip = await JSZip.loadAsync(file);
             const xml = await zip.file('word/document.xml')?.async('string');
-            if (!xml) throw new Error('无 document.xml');
+            if (!xml) throw new Error('缺少 document.xml');
             const tables = parseAllTables(xml);
             if (type === 'source') {
-                sourceZip = zip; sourceXml = xml; sourceTables = tables; sourceName.textContent = file.name;
+                sourceZip = zip; sourceXml = xml; sourceTables = tables;
+                sourceName.textContent = file.name;
                 populateSelect(sourceTableSel, tables.length);
                 renderTable(sourcePreview, tables[0], 'source');
             } else {
-                targetZip = zip; targetXml = xml; targetTables = tables; targetName.textContent = file.name;
+                targetZip = zip; targetXml = xml; targetTables = tables;
+                targetName.textContent = file.name;
                 populateSelect(targetTableSel, tables.length);
                 renderTable(targetPreview, tables[0], 'target');
             }
             document.getElementById('previewCard').style.display = 'block';
             document.getElementById('sortRefCard').style.display = 'block';
-            toast('解析完成');
-        } catch(e) { console.error(e); toast('解析失败'); }
-        event.target.value = '';
+            toast('文档解析完成');
+        } catch(e) { console.error(e); toast('解析失败：' + e.message); }
+        event.target.value = ''; // 允许重复选择同一文件
     }
 
     function parseAllTables(xmlStr) {
@@ -311,11 +321,13 @@
         for (let i = 0; i < count; i++) sel.innerHTML += `<option value="${i}">表格${i+1}</option>`;
     }
 
+    // 渲染表格并绑定触摸事件
     function renderTable(container, table, type) {
         container.innerHTML = '';
         const tbl = document.createElement('table');
         tbl.className = 'table-preview';
         const colCount = table.rows[0]?.length || 0;
+        // 列头
         const hRow = document.createElement('tr');
         hRow.innerHTML = '<th></th>';
         for (let j = 0; j < colCount; j++) {
@@ -328,6 +340,7 @@
             hRow.appendChild(th);
         }
         tbl.appendChild(hRow);
+        // 数据行
         for (let i = 0; i < table.rows.length; i++) {
             const tr = document.createElement('tr');
             const rh = document.createElement('th');
@@ -344,7 +357,9 @@
             tbl.appendChild(tr);
         }
         container.appendChild(tbl);
-        highlightCells(container, type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells);
+        // 高亮已有选择
+        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
+        highlightCells(container, cells);
     }
 
     function handleColumnClick(type, col, event) {
@@ -361,7 +376,7 @@
         highlightCells(wrapper, cells);
     }
 
-    // 触摸框选逻辑
+    // 触摸框选
     function touchStartBoxSelect(e, type, wrapper) {
         e.preventDefault();
         const touch = e.touches[0];
@@ -390,10 +405,10 @@
         const key = `${row}-${col}`;
         if (deltaY > 0) {
             cells.add(key);
-            wrapper.scrollTop += 8;
+            wrapper.scrollTop += 6;
         } else if (deltaY < 0) {
             cells.delete(key);
-            wrapper.scrollTop -= 8;
+            wrapper.scrollTop -= 6;
         }
         highlightCells(wrapper, cells);
     }
@@ -407,44 +422,49 @@
         });
     }
 
+    // 清除选择
     clearSelBtn.addEventListener('click', () => {
         sourceCells.clear(); targetCells.clear(); refCells.clear();
         [sourcePreview, targetPreview, refPreview].forEach(w => highlightCells(w, new Set()));
     });
 
+    // 切换表格
     sourceTableSel.addEventListener('change', () => { srcIdx = +sourceTableSel.value; sourceCells.clear(); renderTable(sourcePreview, sourceTables[srcIdx], 'source'); });
     targetTableSel.addEventListener('change', () => { tgtIdx = +targetTableSel.value; targetCells.clear(); renderTable(targetPreview, targetTables[tgtIdx], 'target'); });
 
+    // 提取数据
     extractBtn.addEventListener('click', () => {
-        if (!sourceCells.size) return toast('请框选源区域');
+        if (!sourceCells.size) return toast('请先在源表格中框选区域');
         const table = sourceTables[srcIdx].rows;
         extractedData = [];
-        const sortedKeys = [...sourceCells].map(k => k.split('-').map(Number)).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
-        for (let [r,c] of sortedKeys) {
+        const keys = [...sourceCells].map(k => k.split('-').map(Number)).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
+        for (let [r,c] of keys) {
             if (r < table.length && c < table[r].length) {
                 const txt = table[r][c].text;
                 if (txt) extractedData.push(txt);
             }
         }
-        if (!extractedData.length) return toast('所选区无文本');
+        if (!extractedData.length) return toast('所选区域无文本');
         originalData = [...extractedData];
         sortedData = [...extractedData];
         renderSortList();
         document.getElementById('sortCard').style.display = 'block';
-        info.textContent = `${extractedData.length} 条`;
+        info.textContent = `${extractedData.length} 条数据`;
         updateExportButton();
     });
 
+    // 编辑数据项
     function editItem(index) {
         const oldVal = sortedData[index];
         const newVal = prompt('修改内容：', oldVal);
         if (newVal !== null) {
             sortedData[index] = newVal.trim();
             renderSortList();
-            toast('已更新');
+            toast('已修改');
         }
     }
 
+    // 渲染排序列表（带触摸拖拽）
     function renderSortList() {
         sortListEl.innerHTML = '';
         sortedData.forEach((item, idx) => {
@@ -454,9 +474,8 @@
             li.dataset.index = idx;
             li.innerHTML = `
                 <span class="drag-handle">☰</span>
-                <span class="item-text" ondblclick="this.nextElementSibling.click()">${item === '' ? '（空）' : item}</span>
-                <button class="edit-btn">✏️</button>
-            `;
+                <span class="item-text">${item === '' ? '（空）' : item}</span>
+                <button class="edit-btn">✏️</button>`;
             const editBtn = li.querySelector('.edit-btn');
             editBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -471,18 +490,13 @@
         updateExportButton();
     }
 
-    // 触摸拖拽排序
-    let dragItem = null;
-    let dragStartY = 0;
-    let placeholder = null;
-    let initialIndex = -1;
-
+    let dragItem = null, dragStartY = 0, placeholder = null, initialIndex = -1;
     function handleTouchStart(e) {
-        if (e.target.tagName === 'BUTTON') return; // 不拦截按钮点击
+        if (e.target.tagName === 'BUTTON') return;
         dragItem = this;
         initialIndex = +dragItem.dataset.index;
         dragStartY = e.touches[0].clientY;
-        dragItem.style.opacity = '0.6';
+        dragItem.style.opacity = '0.5';
         placeholder = document.createElement('li');
         placeholder.className = 'sort-item';
         placeholder.style.height = dragItem.offsetHeight + 'px';
@@ -493,28 +507,23 @@
         dragItem.style.width = sortListEl.offsetWidth - 20 + 'px';
         document.body.style.userSelect = 'none';
     }
-
     function handleTouchMove(e) {
         if (!dragItem) return;
         e.preventDefault();
         const touchY = e.touches[0].clientY;
         const diffY = touchY - dragStartY;
         dragItem.style.transform = `translateY(${diffY}px)`;
-
         const children = [...sortListEl.children].filter(c => c !== dragItem);
-        const midY = touchY;
         let targetIdx = initialIndex;
         children.forEach((child, idx) => {
             const rect = child.getBoundingClientRect();
-            if (midY > rect.top + rect.height / 2) targetIdx = idx + 1;
+            if (touchY > rect.top + rect.height / 2) targetIdx = idx + 1;
         });
         if (targetIdx !== initialIndex) {
-            // 移动placeholder
-            const targetChild = sortListEl.children[targetIdx];
-            sortListEl.insertBefore(placeholder, targetChild || null);
+            const ref = sortListEl.children[targetIdx];
+            sortListEl.insertBefore(placeholder, ref || null);
         }
     }
-
     function handleTouchEnd(e) {
         if (!dragItem) return;
         dragItem.style.opacity = '1';
@@ -524,22 +533,25 @@
         dragItem.style.width = '';
         document.body.style.userSelect = '';
         const newIndex = [...sortListEl.children].indexOf(placeholder);
-        if (newIndex !== initialIndex && newIndex >= 0) {
-            const movedItem = sortedData.splice(initialIndex, 1)[0];
-            sortedData.splice(newIndex, 0, movedItem);
+        if (newIndex !== -1 && newIndex !== initialIndex) {
+            const moved = sortedData.splice(initialIndex, 1)[0];
+            sortedData.splice(newIndex, 0, moved);
             renderSortList();
         } else {
-            sortListEl.removeChild(placeholder);
+            if (placeholder) placeholder.remove();
         }
         dragItem = null;
         placeholder = null;
     }
 
+    // 排序依据上传
     async function handleRefUpload(event) {
         const file = event.target.files[0];
         if (!file) return;
         const ext = file.name.split('.').pop().toLowerCase();
+        if (ext !== 'xlsx' && ext !== 'docx') { toast('请选择 .xlsx 或 .docx'); return; }
         refName.textContent = file.name;
+        toast('解析依据文档...');
         try {
             if (ext === 'xlsx') {
                 const buf = await file.arrayBuffer();
@@ -547,16 +559,17 @@
                 const ws = wb.Sheets[wb.SheetNames[0]];
                 const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
                 refTables = [{ rows: rows.map(row => row.map(t => ({ text: String(t).trim() }))) }];
-            } else if (ext === 'docx') {
+            } else {
                 const zip = await JSZip.loadAsync(file);
                 const xml = await zip.file('word/document.xml')?.async('string');
+                if (!xml) throw new Error('无表格');
                 refTables = parseAllTables(xml);
             }
             document.getElementById('refPreviewArea').style.display = 'block';
             populateSelect(refTableSel, refTables.length);
             renderTable(refPreview, refTables[0], 'ref');
-            toast('依据文档解析完成');
-        } catch(e) { toast('解析失败'); }
+            toast('依据文档解析完成，请在下方框选两列');
+        } catch(e) { console.error(e); toast('解析失败'); }
         event.target.value = '';
     }
 
@@ -564,9 +577,9 @@
 
     function getRefPairs() {
         const refTable = refTables[refIdx].rows;
-        const sortedKeys = [...refCells].map(k => k.split('-').map(Number)).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
+        const keys = [...refCells].map(k => k.split('-').map(Number)).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
         const rowMap = new Map();
-        for (let [r,c] of sortedKeys) {
+        for (let [r,c] of keys) {
             if (!rowMap.has(r)) rowMap.set(r, []);
             rowMap.get(r).push(c);
         }
@@ -585,11 +598,12 @@
         return pairs;
     }
 
+    // 排序逻辑
     applySortBtn.addEventListener('click', () => {
-        if (!refCells.size) return toast('请框选依据区');
-        if (!sortedData.length) return toast('请先提取');
+        if (!refCells.size) return toast('请框选依据区域');
+        if (!sortedData.length) return toast('请先提取数据');
         const pairs = getRefPairs();
-        if (!pairs.length) return toast('无法构成两列');
+        if (!pairs.length) return toast('未提取到有效序列对');
         pairs.sort((a,b) => a.seq - b.seq);
         const matched = [], unmatched = [], used = new Set();
         pairs.forEach(p => {
@@ -602,14 +616,14 @@
         sortedData.forEach(item => { if (!used.has(item)) unmatched.push(item); });
         sortedData = [...matched, ...unmatched];
         renderSortList();
-        refStatus.textContent = `精确：${matched.filter(i=>i!=='').length}条匹配，${unmatched.length}条未匹配`;
+        refStatus.textContent = `精确匹配：${matched.filter(i=>i).length}条，空位${matched.filter(i=>!i).length}个`;
     });
 
     function performFuzzySort(threshold) {
-        if (!refCells.size) return toast('请框选依据区');
-        if (!sortedData.length) return toast('请先提取');
+        if (!refCells.size) return toast('请框选依据区域');
+        if (!sortedData.length) return toast('请先提取数据');
         const pairs = getRefPairs();
-        if (!pairs.length) return toast('无法构成两列');
+        if (!pairs.length) return toast('未提取到有效序列对');
         pairs.sort((a,b) => a.seq - b.seq);
         const available = [...sortedData];
         const used = new Set();
@@ -630,14 +644,14 @@
         sortedData = [...matched, ...unmatched];
         renderSortList();
         const pct = Math.round(threshold * 100);
-        refStatus.textContent = `模糊≥${pct}%：${matched.filter(i=>i!=='').length}条匹配`;
+        refStatus.textContent = `模糊≥${pct}%：${matched.filter(i=>i).length}条匹配`;
     }
 
     fuzzySort90Btn.addEventListener('click', () => performFuzzySort(0.9));
     fuzzySort75Btn.addEventListener('click', () => performFuzzySort(0.75));
     fuzzyCustomBtn.addEventListener('click', () => {
         const val = parseInt(fuzzyThreshold.value);
-        if (isNaN(val) || val < 20 || val > 95) return toast('阈值20-95');
+        if (isNaN(val) || val < 20 || val > 95) return toast('阈值需在20-95之间');
         performFuzzySort(val / 100);
     });
 
@@ -656,8 +670,8 @@
         for (let j = 0; j <= len2; j++) matrix[0][j] = j;
         for (let i = 1; i <= len1; i++) {
             for (let j = 1; j <= len2; j++) {
-                if (s1.charAt(i - 1) === s2.charAt(j - 1)) matrix[i][j] = matrix[i - 1][j - 1];
-                else matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
+                if (s1.charAt(i-1) === s2.charAt(j-1)) matrix[i][j] = matrix[i-1][j-1];
+                else matrix[i][j] = Math.min(matrix[i-1][j-1] + 1, matrix[i][j-1] + 1, matrix[i-1][j] + 1);
             }
         }
         return matrix[len1][len2];
@@ -665,20 +679,22 @@
 
     resetBtn.addEventListener('click', () => { sortedData = [...originalData]; renderSortList(); });
 
+    // 导出
     exportBtn.addEventListener('click', async () => {
-        if (!targetZip || !targetXml) return toast('缺目标文档');
-        if (!sortedData.length) return toast('无数据');
-        if (!targetCells.size) return toast('请框选目标区域');
+        if (!targetZip || !targetXml) return toast('缺失目标文档');
+        if (!sortedData.length) return toast('无排序数据');
+        if (!targetCells.size) return toast('请框选目标替换区域');
+
         const finalData = [...sortedData];
         const table = targetTables[tgtIdx];
-        const sortedKeys = [...targetCells].map(k => k.split('-').map(Number)).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
+        const keys = [...targetCells].map(k => k.split('-').map(Number)).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(targetXml, 'text/xml');
         const tbls = xmlDoc.getElementsByTagNameNS('*', 'tbl');
         const tbl = tbls[tgtIdx];
         const trs = tbl.getElementsByTagNameNS('*', 'tr');
         let idx = 0;
-        for (let [r,c] of sortedKeys) {
+        for (let [r,c] of keys) {
             if (idx >= finalData.length) break;
             if (r < trs.length) {
                 const tcs = trs[r].getElementsByTagNameNS('*', 'tc');
@@ -691,19 +707,28 @@
         const blob = await targetZip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
         const fileName = (exportFileName.value.trim() || '排序替换结果') + '.docx';
         const file = new File([blob], fileName, {type: blob.type});
+
         if (navigator.share && navigator.canShare && navigator.canShare({files: [file]})) {
-            try { await navigator.share({ title: fileName, files: [file] }); toast('分享面板已打开'); }
-            catch(e) { if (e.name !== 'AbortError') downloadFile(blob, fileName); }
-        } else downloadFile(blob, fileName);
+            try {
+                await navigator.share({ title: fileName, files: [file] });
+                toast('分享面板已打开，请选择微信/QQ');
+            } catch(e) {
+                if (e.name !== 'AbortError') downloadFile(blob, fileName);
+            }
+        } else {
+            downloadFile(blob, fileName);
+        }
     });
 
     function downloadFile(blob, fileName) {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url; a.download = fileName;
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        toast('下载成功');
+        toast('文件已下载，可分享到微信/QQ');
     }
 
     function setCellText(cellXml, newText) {
