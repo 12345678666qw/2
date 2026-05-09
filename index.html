@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>表格排序替换 · 坐标框选 · 手机电脑通用</title>
+    <title>表格排序替换 · 坐标框选</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
@@ -40,16 +40,21 @@
         .table-toolbar select { padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; }
         .coord-input {
             padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px;
-            font-size: 0.75rem; width: 120px; max-width: 40vw;
+            font-size: 0.75rem; width: 110px; max-width: 30vw;
         }
         .coord-btn {
             padding: 5px 10px; font-size: 0.75rem; border-radius: 6px; border: 1px solid var(--primary);
             background: #fff; color: var(--primary); cursor: pointer; touch-action: manipulation;
         }
         .table-preview-wrapper {
-            overflow: auto; max-height: 300px; border: 1px solid var(--border);
-            border-radius: 8px; position: relative; user-select: none; touch-action: pan-x pan-y;
-            -webkit-overflow-scrolling: touch;
+            overflow: auto;          /* 允许水平和垂直滚动 */
+            max-height: 300px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            user-select: none;
+            -webkit-overflow-scrolling: touch; /* iOS流畅滚动 */
+            touch-action: pan-x pan-y; /* 允许浏览器处理双指手势，但保留单指框选 */
+            position: relative;
         }
         .table-preview {
             border-collapse: collapse; width: max-content; min-width: 100%; font-size: 0.8rem;
@@ -117,7 +122,7 @@
     <div style="text-align:center; padding:8px 0;">
         <span style="font-size:32px;">📄⚡📊⚡📄</span>
         <h2 style="font-size:1.4rem;">表格排序替换 · 坐标框选</h2>
-        <p style="color:#64748b;">框选行列 / 输入坐标，自定义相似度，编辑导出</p>
+        <p style="color:#64748b;">框选/坐标/点击列头，编辑并导出</p>
     </div>
 
     <!-- 上传 -->
@@ -142,26 +147,22 @@
 
     <!-- 表格预览与选择 -->
     <div class="card" id="previewCard" style="display:none;">
-        <h3>👁️ 源表格 & 目标表格 · 框选/坐标</h3>
+        <h3>👁️ 源表格 & 目标表格 · 滑动/坐标框选</h3>
         <div style="display:flex; gap:12px; flex-wrap:wrap;">
-            <!-- 源表格 -->
             <div style="flex:1; min-width:300px;">
                 <div class="table-toolbar">
-                    <label>源表格</label>
-                    <select id="sourceTableSel"></select>
-                    <span style="margin-left:4px; font-size:0.7rem;">坐标:</span>
-                    <input type="text" class="coord-input" id="sourceCoordInput" placeholder="如 A,B,C 或 A1:B3">
+                    <label>源表格</label><select id="sourceTableSel"></select>
+                    <span style="font-size:0.7rem;">坐标:</span>
+                    <input type="text" class="coord-input" id="sourceCoordInput" placeholder="如 A,B 或 A1:B3">
                     <button class="coord-btn" id="sourceCoordBtn">应用</button>
                 </div>
                 <div class="table-preview-wrapper" id="sourcePreview"></div>
             </div>
-            <!-- 目标表格 -->
             <div style="flex:1; min-width:300px;">
                 <div class="table-toolbar">
-                    <label>目标表格</label>
-                    <select id="targetTableSel"></select>
-                    <span style="margin-left:4px; font-size:0.7rem;">坐标:</span>
-                    <input type="text" class="coord-input" id="targetCoordInput" placeholder="如 A,B,C 或 A1:B3">
+                    <label>目标表格</label><select id="targetTableSel"></select>
+                    <span style="font-size:0.7rem;">坐标:</span>
+                    <input type="text" class="coord-input" id="targetCoordInput" placeholder="如 A,B 或 A1:B3">
                     <button class="coord-btn" id="targetCoordBtn">应用</button>
                 </div>
                 <div class="table-preview-wrapper" id="targetPreview"></div>
@@ -185,9 +186,8 @@
         </div>
         <div id="refPreviewArea" style="display:none;">
             <div class="table-toolbar">
-                <label>表格</label>
-                <select id="refTableSel"></select>
-                <span style="margin-left:4px; font-size:0.7rem;">坐标:</span>
+                <label>表格</label><select id="refTableSel"></select>
+                <span style="font-size:0.7rem;">坐标:</span>
                 <input type="text" class="coord-input" id="refCoordInput" placeholder="如 A,B 或 A1:B3">
                 <button class="coord-btn" id="refCoordBtn">应用</button>
             </div>
@@ -268,7 +268,7 @@
     const toastEl = document.getElementById('toast');
     const refStatus = document.getElementById('refStatus');
 
-    // 坐标输入框
+    // 坐标输入元素
     const sourceCoordInput = document.getElementById('sourceCoordInput');
     const targetCoordInput = document.getElementById('targetCoordInput');
     const refCoordInput = document.getElementById('refCoordInput');
@@ -286,7 +286,7 @@
         exportBtn.disabled = !sortedData.length || !targetCells.size;
     }
 
-    // 点击上传区域
+    // 上传区域点击
     document.getElementById('sourceBox').addEventListener('click', ()=> sourceFile.click());
     document.getElementById('targetBox').addEventListener('click', ()=> targetFile.click());
     document.getElementById('refBox').addEventListener('click', ()=> refFile.click());
@@ -367,7 +367,7 @@
         for (let i = 0; i < count; i++) sel.innerHTML += `<option value="${i}">表格${i+1}</option>`;
     }
 
-    // 坐标解析
+    // 坐标解析函数
     function colLetterToIndex(letter) {
         let col = 0;
         for (let i = 0; i < letter.length; i++) {
@@ -380,7 +380,7 @@
         const result = new Set();
         if (!inputStr.trim()) return result;
 
-        // 区域 A1:B3 或 A1..B3
+        // 区域格式 A1:B3 或 A1..B3
         const rangeMatch = inputStr.match(/^([A-Z]+)(\d+)[:.]{1,2}([A-Z]+)(\d+)$/i);
         if (rangeMatch) {
             const colStart = colLetterToIndex(rangeMatch[1]);
@@ -439,13 +439,13 @@
         toast(`已选中 ${cells.size} 个单元格`);
     }
 
-    // 坐标按钮事件
+    // 绑定坐标按钮和回车事件
     sourceCoordBtn.addEventListener('click', () => applyCoordSelection('source'));
     targetCoordBtn.addEventListener('click', () => applyCoordSelection('target'));
     refCoordBtn.addEventListener('click', () => applyCoordSelection('ref'));
-    sourceCoordInput.addEventListener('keypress', e => { if (e.key === 'Enter') applyCoordSelection('source'); });
-    targetCoordInput.addEventListener('keypress', e => { if (e.key === 'Enter') applyCoordSelection('target'); });
-    refCoordInput.addEventListener('keypress', e => { if (e.key === 'Enter') applyCoordSelection('ref'); });
+    sourceCoordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') applyCoordSelection('source'); });
+    targetCoordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') applyCoordSelection('target'); });
+    refCoordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') applyCoordSelection('ref'); });
 
     function renderTable(container, table, type) {
         container.innerHTML = '';
@@ -473,8 +473,10 @@
                 const td = document.createElement('td');
                 td.textContent = table.rows[i][j].text;
                 td.dataset.row = i; td.dataset.col = j;
+                // 鼠标事件
                 td.addEventListener('mousedown', (e) => startBoxSelect(e, type, container));
                 td.addEventListener('mousemove', (e) => updateBoxSelect(e, type));
+                // 触摸事件
                 td.addEventListener('touchstart', (e) => touchStartBox(e, type, container), {passive: false});
                 td.addEventListener('touchmove', (e) => touchMoveBox(e, type), {passive: false});
                 tr.appendChild(td);
@@ -498,10 +500,88 @@
         highlightCells(wrapper, cells);
     }
 
-    function startBoxSelect(e, type, wrapper) { /* ... 同前 ... */ }
-    function updateBoxSelect(e, type) { /* ... 含水平滚动 ... */ }
-    function touchStartBox(e, type, wrapper) { /* ... */ }
-    function touchMoveBox(e, type) { /* ... 含水平滚动 ... */ }
+    function startBoxSelect(e, type, wrapper) {
+        if (!e.target.matches('td')) return;
+        e.preventDefault();
+        isSelecting = true;
+        currentType = type;
+        lastClientX = e.clientX;
+        lastClientY = e.clientY;
+        const ctrl = e.ctrlKey || e.metaKey;
+        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
+        if (!ctrl) cells.clear();
+        const row = +e.target.dataset.row, col = +e.target.dataset.col;
+        cells.add(`${row}-${col}`);
+        highlightCells(wrapper, cells);
+    }
+
+    function updateBoxSelect(e, type) {
+        if (!isSelecting || currentType !== type || !e.target.matches('td')) return;
+        const deltaX = e.clientX - lastClientX;
+        const deltaY = e.clientY - lastClientY;
+        lastClientX = e.clientX;
+        lastClientY = e.clientY;
+        const wrapper = type === 'source' ? sourcePreview : type === 'target' ? targetPreview : refPreview;
+        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
+        const row = +e.target.dataset.row, col = +e.target.dataset.col;
+        const key = `${row}-${col}`;
+        if (deltaY > 0) {
+            cells.add(key);
+            wrapper.scrollTop += 8;
+        } else if (deltaY < 0) {
+            cells.delete(key);
+            wrapper.scrollTop -= 8;
+        }
+        if (deltaX > 0) {
+            wrapper.scrollLeft += 8;
+        } else if (deltaX < 0) {
+            wrapper.scrollLeft -= 8;
+        }
+        highlightCells(wrapper, cells);
+    }
+
+    function touchStartBox(e, type, wrapper) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        if (!target || !target.matches('td')) return;
+        isSelecting = true;
+        currentType = type;
+        lastClientX = touch.clientX;
+        lastClientY = touch.clientY;
+        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
+        cells.clear();
+        cells.add(`${target.dataset.row}-${target.dataset.col}`);
+        highlightCells(wrapper, cells);
+    }
+
+    function touchMoveBox(e, type) {
+        if (!isSelecting || currentType !== type) return;
+        e.preventDefault();
+        const touch = e.touches[0];
+        const deltaX = touch.clientX - lastClientX;
+        const deltaY = touch.clientY - lastClientY;
+        lastClientX = touch.clientX;
+        lastClientY = touch.clientY;
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        if (!target || !target.matches('td')) return;
+        const wrapper = type === 'source' ? sourcePreview : type === 'target' ? targetPreview : refPreview;
+        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
+        const key = `${target.dataset.row}-${target.dataset.col}`;
+        if (deltaY > 0) {
+            cells.add(key);
+            wrapper.scrollTop += 8;
+        } else if (deltaY < 0) {
+            cells.delete(key);
+            wrapper.scrollTop -= 8;
+        }
+        if (deltaX > 0) {
+            wrapper.scrollLeft += 8;
+        } else if (deltaX < 0) {
+            wrapper.scrollLeft -= 8;
+        }
+        highlightCells(wrapper, cells);
+    }
 
     window.addEventListener('mouseup', () => { isSelecting = false; });
     window.addEventListener('touchend', () => { isSelecting = false; });
@@ -522,28 +602,365 @@
     sourceTableSel.addEventListener('change', () => { srcIdx = +sourceTableSel.value; sourceCells.clear(); renderTable(sourcePreview, sourceTables[srcIdx], 'source'); sourceCoordInput.value = ''; });
     targetTableSel.addEventListener('change', () => { tgtIdx = +targetTableSel.value; targetCells.clear(); renderTable(targetPreview, targetTables[tgtIdx], 'target'); targetCoordInput.value = ''; });
 
-    extractBtn.addEventListener('click', () => { /* ... 提取数据 ... */ });
-    function editItem(index) { /* ... */ }
-    function renderSortList() { /* ... 含拖拽 ... */ }
-    // 排序依据处理
-    async function handleRefUpload(event) { /* ... */ }
+    extractBtn.addEventListener('click', () => {
+        if (!sourceCells.size) return toast('请在源表格框选区域');
+        const table = sourceTables[srcIdx].rows;
+        extractedData = [];
+        const sortedKeys = [...sourceCells].map(k => k.split('-').map(Number)).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
+        for (let [r,c] of sortedKeys) {
+            if (r < table.length && c < table[r].length) {
+                const txt = table[r][c].text;
+                if (txt) extractedData.push(txt);
+            }
+        }
+        if (!extractedData.length) return toast('所选区域无文本');
+        originalData = [...extractedData];
+        sortedData = [...extractedData];
+        renderSortList();
+        document.getElementById('sortCard').style.display = 'block';
+        info.textContent = `已提取 ${extractedData.length} 条`;
+        updateExportButton();
+    });
+
+    function editItem(index) {
+        const oldValue = sortedData[index];
+        const newValue = prompt('修改数据项内容：', oldValue);
+        if (newValue !== null) {
+            sortedData[index] = newValue.trim();
+            renderSortList();
+            toast('已更新数据项');
+        }
+    }
+
+    function renderSortList() {
+        sortListEl.innerHTML = '';
+        sortedData.forEach((item, idx) => {
+            const li = document.createElement('li');
+            li.className = 'sort-item';
+            if (item === '') li.classList.add('empty-slot');
+            li.draggable = true;
+            li.dataset.index = idx;
+            li.innerHTML = `
+                <span class="drag-handle">☰</span>
+                <span class="item-text" ondblclick="this.closest('.sort-item').querySelector('.edit-btn').click()">${item === '' ? '（空）' : item}</span>
+                <button class="edit-btn" data-index="${idx}">✏️ 编辑</button>
+            `;
+            li.querySelector('.edit-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                editItem(idx);
+            });
+            li.addEventListener('dragstart', handleDragStart);
+            li.addEventListener('dragover', e => e.preventDefault());
+            li.addEventListener('drop', handleDrop);
+            li.addEventListener('touchstart', handleTouchDragStart, {passive: false});
+            li.addEventListener('touchmove', handleTouchDragMove, {passive: false});
+            li.addEventListener('touchend', handleTouchDragEnd);
+            sortListEl.appendChild(li);
+        });
+        updateExportButton();
+    }
+
+    let dragSrcIndex = null;
+    function handleDragStart(e) {
+        dragSrcIndex = +this.dataset.index;
+        e.dataTransfer.effectAllowed = 'move';
+    }
+    function handleDrop(e) {
+        e.preventDefault();
+        const targetIndex = +this.dataset.index;
+        if (dragSrcIndex === null || targetIndex === dragSrcIndex) return;
+        const srcItem = sortedData[dragSrcIndex];
+        const targetItem = sortedData[targetIndex];
+        if (targetItem === '' && srcItem !== '') {
+            sortedData[targetIndex] = srcItem;
+            sortedData.splice(dragSrcIndex, 1);
+        } else {
+            [sortedData[dragSrcIndex], sortedData[targetIndex]] = [sortedData[targetIndex], sortedData[dragSrcIndex]];
+        }
+        renderSortList();
+        dragSrcIndex = null;
+    }
+
+    let touchDragItem = null, touchStartY = 0, touchPlaceholder = null, touchInitialIndex = -1;
+    function handleTouchDragStart(e) {
+        if (e.target.tagName === 'BUTTON') return;
+        touchDragItem = this;
+        touchInitialIndex = +touchDragItem.dataset.index;
+        const touch = e.touches[0];
+        touchStartY = touch.clientY;
+        touchDragItem.style.opacity = '0.6';
+        touchDragItem.style.background = '#e2e8f0';
+        touchPlaceholder = document.createElement('li');
+        touchPlaceholder.className = 'sort-item';
+        touchPlaceholder.style.height = touchDragItem.offsetHeight + 'px';
+        touchPlaceholder.style.background = '#e2e8f0';
+        sortListEl.insertBefore(touchPlaceholder, touchDragItem.nextSibling);
+        touchDragItem.style.position = 'absolute';
+        touchDragItem.style.zIndex = '10';
+        touchDragItem.style.width = sortListEl.offsetWidth - 20 + 'px';
+        document.body.style.userSelect = 'none';
+    }
+    function handleTouchDragMove(e) {
+        if (!touchDragItem) return;
+        e.preventDefault();
+        const touch = e.touches[0];
+        const diffY = touch.clientY - touchStartY;
+        touchDragItem.style.transform = `translateY(${diffY}px)`;
+        const children = [...sortListEl.children].filter(c => c !== touchDragItem);
+        let targetIdx = touchInitialIndex;
+        children.forEach((child, idx) => {
+            const rect = child.getBoundingClientRect();
+            if (touch.clientY > rect.top + child.offsetHeight / 2) targetIdx = idx + 1;
+        });
+        const targetChild = sortListEl.children[targetIdx];
+        sortListEl.insertBefore(touchPlaceholder, targetChild || null);
+    }
+    function handleTouchDragEnd() {
+        if (!touchDragItem) return;
+        touchDragItem.style.opacity = '1';
+        touchDragItem.style.position = '';
+        touchDragItem.style.zIndex = '';
+        touchDragItem.style.transform = '';
+        touchDragItem.style.width = '';
+        touchDragItem.style.background = '';
+        document.body.style.userSelect = '';
+        const newIndex = [...sortListEl.children].indexOf(touchPlaceholder);
+        if (newIndex !== -1 && newIndex !== touchInitialIndex) {
+            const moved = sortedData.splice(touchInitialIndex, 1)[0];
+            sortedData.splice(newIndex, 0, moved);
+        }
+        if (touchPlaceholder) {
+            touchPlaceholder.remove();
+            touchPlaceholder = null;
+        }
+        renderSortList();
+        touchDragItem = null;
+    }
+
+    async function handleRefUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (!['xlsx','docx'].includes(ext)) { toast('请选择 .xlsx 或 .docx 文件'); return; }
+        refName.textContent = file.name;
+        toast('解析中...');
+        try {
+            if (ext === 'xlsx') {
+                const buf = await file.arrayBuffer();
+                const wb = XLSX.read(buf, {type:'array'});
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+                refTables = [{ rows: rows.map(row => row.map(t => ({ text: String(t).trim() }))) }];
+            } else if (ext === 'docx') {
+                const zip = await JSZip.loadAsync(file);
+                const xml = await zip.file('word/document.xml')?.async('string');
+                refTables = parseAllTables(xml);
+            }
+            document.getElementById('refPreviewArea').style.display = 'block';
+            populateSelect(refTableSel, refTables.length);
+            renderTable(refPreview, refTables[0], 'ref');
+            refCoordInput.value = '';
+            toast('依据文档解析完成');
+        } catch(e) { toast('解析失败'); }
+        event.target.value = '';
+    }
+
     refTableSel.addEventListener('change', () => { refIdx = +refTableSel.value; refCells.clear(); renderTable(refPreview, refTables[refIdx], 'ref'); refCoordInput.value = ''; });
-    function getRefPairs() { /* ... */ }
+
+    function getRefPairs() {
+        const refTable = refTables[refIdx].rows;
+        const sortedKeys = [...refCells].map(k => k.split('-').map(Number)).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
+        const rowMap = new Map();
+        for (let [r,c] of sortedKeys) {
+            if (!rowMap.has(r)) rowMap.set(r, []);
+            rowMap.get(r).push(c);
+        }
+        const pairs = [];
+        for (let [r, cols] of rowMap) {
+            cols.sort((a,b)=>a-b);
+            if (cols.length >= 2) {
+                const c1 = cols[0], c2 = cols[1];
+                if (r < refTable.length && c1 < refTable[r].length && c2 < refTable[r].length) {
+                    const seq = parseFloat(refTable[r][c1].text);
+                    const name = refTable[r][c2].text;
+                    if (!isNaN(seq) && name) pairs.push({ seq, name });
+                }
+            }
+        }
+        return pairs;
+    }
+
     applySortBtn.addEventListener('click', performExactSort);
-    function performExactSort() { /* ... */ }
-    function performFuzzySort(threshold) { /* ... */ }
+
+    function performExactSort() {
+        if (!refCells.size) return toast('请框选依据区域');
+        if (!sortedData.length) return toast('请先提取源数据');
+        const pairs = getRefPairs();
+        if (!pairs.length) return toast('所选区域无法构成两列');
+        pairs.sort((a,b) => a.seq - b.seq);
+        const matched = [], unmatched = [], used = new Set();
+        pairs.forEach(p => {
+            const idx = sortedData.indexOf(p.name);
+            if (idx !== -1 && !used.has(p.name)) {
+                matched.push(p.name);
+                used.add(p.name);
+            } else {
+                matched.push('');
+            }
+        });
+        sortedData.forEach(item => { if (!used.has(item)) unmatched.push(item); });
+        sortedData = [...matched, ...unmatched];
+        renderSortList();
+        const emptyCount = matched.filter(i => i === '').length;
+        refStatus.textContent = `精确匹配：留出 ${emptyCount} 个空位，${unmatched.length} 条未匹配排至末尾`;
+    }
+
+    function performFuzzySort(threshold) {
+        if (!refCells.size) return toast('请框选依据区域');
+        if (!sortedData.length) return toast('请先提取源数据');
+        const pairs = getRefPairs();
+        if (!pairs.length) return toast('所选区域无法构成两列');
+        pairs.sort((a,b) => a.seq - b.seq);
+        const available = [...sortedData], used = new Set(), matched = [], unmatched = [];
+        pairs.forEach(p => {
+            let bestIdx = -1, bestSim = 0;
+            for (let i = 0; i < available.length; i++) {
+                if (used.has(i)) continue;
+                const sim = similarity(available[i], p.name);
+                if (sim > bestSim) { bestSim = sim; bestIdx = i; }
+            }
+            if (bestIdx !== -1 && bestSim >= threshold) {
+                matched.push(available[bestIdx]);
+                used.add(bestIdx);
+            } else {
+                matched.push('');
+            }
+        });
+        available.forEach((item, i) => { if (!used.has(i)) unmatched.push(item); });
+        sortedData = [...matched, ...unmatched];
+        renderSortList();
+        const emptyCount = matched.filter(i => i === '').length;
+        const percent = Math.round(threshold * 100);
+        refStatus.textContent = `模糊匹配≥${percent}%：留出 ${emptyCount} 个空位，${unmatched.length} 条未匹配排至末尾`;
+        toast(`模糊匹配≥${percent}%完成：${matched.length - emptyCount} 条匹配`);
+    }
+
     fuzzySort90Btn.addEventListener('click', () => performFuzzySort(0.9));
     fuzzySort75Btn.addEventListener('click', () => performFuzzySort(0.75));
-    fuzzyCustomBtn.addEventListener('click', () => { /* ... */ });
-    function similarity(a, b) { /* ... */ }
-    function editDistance(s1, s2) { /* ... */ }
-    resetBtn.addEventListener('click', () => { sortedData = [...originalData]; renderSortList(); });
-    exportBtn.addEventListener('click', async () => { /* ... */ });
-    function downloadFile(blob, fileName) { /* ... */ }
-    function setCellText(cellXml, newText) { /* ... */ }
+    fuzzyCustomBtn.addEventListener('click', () => {
+        let val = parseInt(fuzzyThreshold.value, 10);
+        if (isNaN(val) || val < 20 || val > 95) { toast('相似度阈值需在20-95之间'); return; }
+        performFuzzySort(val / 100);
+    });
 
-    // 补全所有被省略的函数实现（完整版请参考上文或之前的回复，此处为避免折叠过长略）
-    // 实际使用时请将注释的部分用完整代码替换，已确保功能正常运行。
+    function similarity(a, b) {
+        if (!a && !b) return 1;
+        if (!a || !b) return 0;
+        const maxLen = Math.max(a.length, b.length);
+        if (maxLen === 0) return 1;
+        const dist = editDistance(a, b);
+        return 1 - dist / maxLen;
+    }
+
+    function editDistance(s1, s2) {
+        s1 = s1.toLowerCase();
+        s2 = s2.toLowerCase();
+        const len1 = s1.length, len2 = s2.length;
+        const matrix = [];
+        for (let i = 0; i <= len1; i++) matrix[i] = [i];
+        for (let j = 0; j <= len2; j++) matrix[0][j] = j;
+        for (let i = 1; i <= len1; i++) {
+            for (let j = 1; j <= len2; j++) {
+                if (s1.charAt(i - 1) === s2.charAt(j - 1)) {
+                    matrix[i][j] = matrix[i - 1][j - 1];
+                } else {
+                    matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
+                }
+            }
+        }
+        return matrix[len1][len2];
+    }
+
+    resetBtn.addEventListener('click', () => { sortedData = [...originalData]; renderSortList(); });
+
+    exportBtn.addEventListener('click', async () => {
+        if (!targetZip || !targetXml) return toast('缺失目标文档');
+        if (!sortedData.length) return toast('无排序数据');
+        if (!targetCells.size) return toast('请框选目标替换区域');
+
+        const finalData = [...sortedData];
+        const table = targetTables[tgtIdx];
+        const sortedKeys = [...targetCells].map(k => k.split('-').map(Number)).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
+
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(targetXml, 'text/xml');
+        const tbls = xmlDoc.getElementsByTagNameNS('*', 'tbl');
+        const tbl = tbls[tgtIdx];
+        const trs = tbl.getElementsByTagNameNS('*', 'tr');
+        let idx = 0;
+        for (let [r,c] of sortedKeys) {
+            if (idx >= finalData.length) break;
+            if (r < trs.length) {
+                const tcs = trs[r].getElementsByTagNameNS('*', 'tc');
+                if (c < tcs.length) {
+                    setCellText(tcs[c], finalData[idx++]);
+                }
+            }
+        }
+
+        const serializer = new XMLSerializer();
+        const newXml = serializer.serializeToString(xmlDoc);
+        targetZip.file('word/document.xml', newXml);
+        const blob = await targetZip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+        const fileName = (exportFileName.value.trim() || '排序替换结果') + '.docx';
+        const file = new File([blob], fileName, {type: blob.type});
+
+        if (navigator.share && navigator.canShare && navigator.canShare({files: [file]})) {
+            try {
+                await navigator.share({ title: fileName, files: [file] });
+                toast('分享面板已打开，请选择微信或QQ');
+            } catch (err) {
+                if (err.name !== 'AbortError') downloadFile(blob, fileName);
+            }
+        } else {
+            downloadFile(blob, fileName);
+        }
+    });
+
+    function downloadFile(blob, fileName) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast('下载已开始，请在微信/QQ中手动发送文件');
+    }
+
+    function setCellText(cellXml, newText) {
+        const ps = cellXml.getElementsByTagNameNS('*', 'p');
+        if (ps.length) {
+            const p = ps[0];
+            while (p.firstChild) p.removeChild(p.firstChild);
+            const doc = p.ownerDocument;
+            const r = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'r');
+            const t = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 't');
+            t.setAttribute('xml:space','preserve');
+            t.textContent = newText;
+            r.appendChild(t); p.appendChild(r);
+            for (let i=1; i<ps.length; i++) ps[i].parentNode?.removeChild(ps[i]);
+        } else {
+            const doc = cellXml.ownerDocument;
+            const p = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'p');
+            const r = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'r');
+            const t = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 't');
+            t.textContent = newText;
+            r.appendChild(t); p.appendChild(r);
+            cellXml.appendChild(p);
+        }
+    }
 })();
 </script>
 </body>
