@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>表格排序替换 · 微信聊天记录直接选文件</title>
+    <title>表格排序替换 · 微信QQ聊天记录直接选文件</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
@@ -117,16 +117,16 @@
             <div class="upload-box" id="sourceBox">
                 <span class="icon">📎</span><p><strong>源文档</strong> (.docx)</p>
                 <div class="file-name" id="sourceName"></div>
-                <input type="file" id="sourceFile" accept="*/*">
+                <input type="file" id="sourceFile">
             </div>
             <div class="upload-box" id="targetBox">
                 <span class="icon">📌</span><p><strong>目标文档</strong> (.docx)</p>
                 <div class="file-name" id="targetName"></div>
-                <input type="file" id="targetFile" accept="*/*">
+                <input type="file" id="targetFile">
             </div>
         </div>
         <p style="font-size:0.7rem; color:#94a3b8; margin-top:6px;">
-            💡 点击后选择“文件”，底部出现“聊天记录”即可从微信聊天中选取
+            💡 点击后若未弹出“聊天记录”，请选择“文件”即可从聊天记录中选取
         </p>
     </div>
 
@@ -156,7 +156,7 @@
             <div class="upload-box" id="refBox">
                 <span class="icon">📋</span><p><strong>排序依据</strong></p>
                 <div class="file-name" id="refName"></div>
-                <input type="file" id="refFile" accept="*/*">
+                <input type="file" id="refFile">
             </div>
         </div>
         <div id="refPreviewArea" style="display:none;">
@@ -254,11 +254,11 @@
     targetFile.addEventListener('change', e => handleDoc(e, 'target'));
     refFile.addEventListener('change', e => handleRefUpload(e));
 
-    // 文件类型校验
+    // 文件类型检查
     function checkFileType(file, allowed) {
         const ext = file.name.split('.').pop().toLowerCase();
         if (!allowed.includes(ext)) {
-            toast(`请选择 ${allowed.join(' / ')} 文件，当前为 .${ext}`);
+            toast(`请选择 ${allowed.join(' / ')} 文件，当前文件为 .${ext}`);
             return false;
         }
         return true;
