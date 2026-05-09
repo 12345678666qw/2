@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>表格排序替换 · 移动端导出优化</title>
+    <title>表格排序替换 · 完整功能 · 移动端导出优化</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
@@ -108,7 +108,7 @@
             font-size: 0.85rem; text-align: center;
         }
         .warn-text {
-            font-size: 0.7rem; color: #dc2626; margin-top: 6px; text-align: center;
+            font-size: 0.7rem; color: #dc2626; margin-top: 6px; text-align: center; display: none;
         }
     </style>
 </head>
@@ -164,14 +164,14 @@
             </div>
         </div>
         <div style="display:flex; gap:8px; margin-top:8px;">
-            <button class="btn btn-primary btn-sm" id="extractBtn">✅ 确认选择并提取</button>
-            <button class="btn btn-outline btn-sm" id="clearSelBtn">🔄 清除全部选择</button>
+            <button class="btn btn-primary btn-sm" id="extractBtn">✅ 提取数据</button>
+            <button class="btn btn-outline btn-sm" id="clearSelBtn">🔄 清除选择</button>
         </div>
     </div>
 
     <!-- 排序依据 -->
     <div class="card" id="sortRefCard" style="display:none;">
-        <h3>📊 排序依据 (Excel/Word) · 点击列头可多选，触摸累积选中</h3>
+        <h3>📊 排序依据 (Excel/Word) · 点击列头多选，触摸累积</h3>
         <div class="upload-row" style="margin-bottom:12px;">
             <div class="upload-box" id="refBox">
                 <span class="icon">📋</span><p>排序依据文档</p>
@@ -189,12 +189,12 @@
             <div class="table-preview-wrapper" id="refPreview" style="max-height:200px;"></div>
             <div style="margin-top:6px;">
                 <div class="sort-btns">
-                    <button class="btn btn-sm btn-primary" id="applySortBtn">🔄 精确匹配</button>
-                    <button class="btn btn-sm btn-outline" id="fuzzySort90Btn">🔍 模糊 ≥90%</button>
-                    <button class="btn btn-sm btn-outline" id="fuzzySort75Btn">🔍 模糊 ≥75%</button>
+                    <button class="btn btn-sm btn-primary" id="applySortBtn">精确匹配</button>
+                    <button class="btn btn-sm btn-outline" id="fuzzySort90Btn">模糊 ≥90%</button>
+                    <button class="btn btn-sm btn-outline" id="fuzzySort75Btn">模糊 ≥75%</button>
                     <input type="number" id="fuzzyThreshold" class="threshold-input" value="90" min="20" max="95" step="1">
                     <span style="font-size:0.8rem;">%</span>
-                    <button class="btn btn-sm btn-outline" id="fuzzyCustomBtn">🔍 自定义阈值匹配</button>
+                    <button class="btn btn-sm btn-outline" id="fuzzyCustomBtn">自定义阈值</button>
                 </div>
                 <span id="refStatus" style="font-size:0.75rem; color:#64748b; margin-top:4px; display:inline-block;"></span>
             </div>
@@ -203,10 +203,10 @@
 
     <!-- 排序列表 -->
     <div class="card" id="sortCard" style="display:none;">
-        <h3>📋 排序列表（可拖拽、双击文本编辑、非空拖入空位填充）</h3>
+        <h3>📋 排序列表（拖拽、双击编辑、拖入空位填充）</h3>
         <div style="display:flex; justify-content:space-between; align-items:center;">
             <span id="info"></span>
-            <button class="btn btn-sm btn-outline" id="resetBtn">恢复原始顺序</button>
+            <button class="btn btn-sm btn-outline" id="resetBtn">恢复原始</button>
         </div>
         <ul class="sort-list" id="sortList"></ul>
     </div>
@@ -216,13 +216,13 @@
         <h3>📤 导出并分享</h3>
         <div class="export-inline">
             <input type="text" id="exportFileName" value="排序替换结果" placeholder="文件名">
-            <button class="btn btn-success" id="exportBtn" disabled>📄 导出并分享到微信/QQ</button>
+            <button class="btn btn-success" id="exportBtn" disabled>📄 导出分享到微信/QQ</button>
         </div>
         <p style="font-size:0.75rem; color:#64748b; margin-top:6px;">
-            仅替换文本，保留原格式；空位将清空单元格。提取数据后按钮启用。
+            仅替换文本，保留原格式；空位清空。提取数据后按钮启用。
         </p>
         <p class="warn-text" id="warnWx">
-            ⚠️ 微信/QQ 中可能无法直接下载，请点击右上角“在浏览器打开”后导出。
+            ⚠️ 微信/QQ中可能无法直接下载，请点击右上角“在浏览器打开”后导出。
         </p>
     </div>
 </div>
@@ -230,10 +230,664 @@
 
 <script>
 (() => {
-    // ... 此处包含之前的全部变量和函数定义，与之前回答相同（上传、解析、框选、坐标、排序、拖拽、编辑等）...
-    // 为节约篇幅，此处省略中间重复代码，请确保使用之前提供的完整逻辑。
+    // 全局状态
+    let sourceZip, targetZip, sourceXml, targetXml;
+    let sourceTables = [], targetTables = [], refTables = [];
+    let srcIdx = 0, tgtIdx = 0, refIdx = 0;
+    let sourceCells = new Set(), targetCells = new Set(), refCells = new Set();
+    let extractedData = [], sortedData = [], originalData = [];
+    let currentType = null;
+    let lastClientX = null, lastClientY = null;
+    let isSelecting = false;
+    let touchDeleteMode = false; // 依据表格触摸删除模式
 
-    // 导出按钮的事件处理（优化移动端）
+    // DOM 元素
+    const sourceFile = document.getElementById('sourceFile');
+    const targetFile = document.getElementById('targetFile');
+    const refFile = document.getElementById('refFile');
+    const sourceName = document.getElementById('sourceName');
+    const targetName = document.getElementById('targetName');
+    const refName = document.getElementById('refName');
+    const sourcePreview = document.getElementById('sourcePreview');
+    const targetPreview = document.getElementById('targetPreview');
+    const refPreview = document.getElementById('refPreview');
+    const sourceTableSel = document.getElementById('sourceTableSel');
+    const targetTableSel = document.getElementById('targetTableSel');
+    const refTableSel = document.getElementById('refTableSel');
+    const extractBtn = document.getElementById('extractBtn');
+    const clearSelBtn = document.getElementById('clearSelBtn');
+    const applySortBtn = document.getElementById('applySortBtn');
+    const fuzzySort90Btn = document.getElementById('fuzzySort90Btn');
+    const fuzzySort75Btn = document.getElementById('fuzzySort75Btn');
+    const fuzzyCustomBtn = document.getElementById('fuzzyCustomBtn');
+    const fuzzyThreshold = document.getElementById('fuzzyThreshold');
+    const sortListEl = document.getElementById('sortList');
+    const info = document.getElementById('info');
+    const resetBtn = document.getElementById('resetBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const exportFileName = document.getElementById('exportFileName');
+    const toastEl = document.getElementById('toast');
+    const refStatus = document.getElementById('refStatus');
+
+    const sourceCoordInput = document.getElementById('sourceCoordInput');
+    const targetCoordInput = document.getElementById('targetCoordInput');
+    const refCoordInput = document.getElementById('refCoordInput');
+    const sourceCoordBtn = document.getElementById('sourceCoordBtn');
+    const targetCoordBtn = document.getElementById('targetCoordBtn');
+    const refCoordBtn = document.getElementById('refCoordBtn');
+
+    function toast(msg, duration = 2000) {
+        toastEl.textContent = msg;
+        toastEl.classList.add('show');
+        setTimeout(() => toastEl.classList.remove('show'), duration);
+    }
+
+    function updateExportButton() {
+        exportBtn.disabled = !sortedData.length || !targetCells.size;
+    }
+
+    // 上传区域点击
+    document.getElementById('sourceBox').addEventListener('click', ()=> sourceFile.click());
+    document.getElementById('targetBox').addEventListener('click', ()=> targetFile.click());
+    document.getElementById('refBox').addEventListener('click', ()=> refFile.click());
+
+    sourceFile.addEventListener('change', e => handleDoc(e, 'source'));
+    targetFile.addEventListener('change', e => handleDoc(e, 'target'));
+    refFile.addEventListener('change', e => handleRefUpload(e));
+
+    function checkFileType(file, allowed) {
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (!allowed.includes(ext)) {
+            toast(`请选择 ${allowed.join(' / ')} 文件，当前为 .${ext} 格式`);
+            return false;
+        }
+        return true;
+    }
+
+    async function handleDoc(event, type) {
+        const file = event.target.files[0];
+        if (!file) return;
+        if (!checkFileType(file, ['docx'])) return;
+        toast('解析中...');
+        try {
+            const zip = await JSZip.loadAsync(file);
+            const xml = await zip.file('word/document.xml')?.async('string');
+            if (!xml) throw new Error('无 document.xml');
+            const tables = parseAllTables(xml);
+            if (type === 'source') {
+                sourceZip = zip; sourceXml = xml; sourceTables = tables; sourceName.textContent = file.name;
+                populateSelect(sourceTableSel, tables.length);
+                renderTable(sourcePreview, tables[0], 'source');
+                sourceCoordInput.value = '';
+            } else {
+                targetZip = zip; targetXml = xml; targetTables = tables; targetName.textContent = file.name;
+                populateSelect(targetTableSel, tables.length);
+                renderTable(targetPreview, tables[0], 'target');
+                targetCoordInput.value = '';
+            }
+            document.getElementById('previewCard').style.display = 'block';
+            document.getElementById('sortRefCard').style.display = 'block';
+            toast('解析完成');
+        } catch(e) { console.error(e); toast('解析失败'); }
+        event.target.value = '';
+    }
+
+    function parseAllTables(xmlStr) {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlStr, 'text/xml');
+        const tbls = xmlDoc.getElementsByTagNameNS('*', 'tbl');
+        const tables = [];
+        for (let tbl of tbls) {
+            const rows = tbl.getElementsByTagNameNS('*', 'tr');
+            const table = [];
+            for (let row of rows) {
+                const cells = row.getElementsByTagNameNS('*', 'tc');
+                const rowData = [];
+                for (let cell of cells) {
+                    let text = '';
+                    const ps = cell.getElementsByTagNameNS('*', 'p');
+                    for (let p of ps) {
+                        const rs = p.getElementsByTagNameNS('*', 'r');
+                        for (let r of rs) {
+                            const t = r.getElementsByTagNameNS('*', 't')[0];
+                            if (t) text += t.textContent;
+                        }
+                    }
+                    rowData.push({ text: text.trim(), xmlCell: cell });
+                }
+                table.push(rowData);
+            }
+            tables.push({ rows: table });
+        }
+        return tables;
+    }
+
+    function populateSelect(sel, count) {
+        sel.innerHTML = '';
+        for (let i = 0; i < count; i++) sel.innerHTML += `<option value="${i}">表格${i+1}</option>`;
+    }
+
+    function colLetterToIndex(letter) {
+        let col = 0;
+        for (let i = 0; i < letter.length; i++) {
+            col = col * 26 + (letter.toUpperCase().charCodeAt(i) - 64);
+        }
+        return col - 1;
+    }
+
+    function parseCoordInput(inputStr, table) {
+        const result = new Set();
+        if (!inputStr.trim()) return result;
+        const rangeMatch = inputStr.match(/^([A-Z]+)(\d+)[:.]{1,2}([A-Z]+)(\d+)$/i);
+        if (rangeMatch) {
+            const colStart = colLetterToIndex(rangeMatch[1]);
+            const rowStart = parseInt(rangeMatch[2]) - 1;
+            const colEnd = colLetterToIndex(rangeMatch[3]);
+            const rowEnd = parseInt(rangeMatch[4]) - 1;
+            if (colStart === -1 || colEnd === -1 || isNaN(rowStart) || isNaN(rowEnd)) return result;
+            for (let r = Math.min(rowStart, rowEnd); r <= Math.max(rowStart, rowEnd); r++) {
+                for (let c = Math.min(colStart, colEnd); c <= Math.max(colStart, colEnd); c++) {
+                    if (r < table.rows.length && c < table.rows[r].length) result.add(`${r}-${c}`);
+                }
+            }
+            return result;
+        }
+        const parts = inputStr.split(/[,，]+/);
+        parts.forEach(part => {
+            part = part.trim().toUpperCase();
+            if (/^[A-Z]+\d+$/.test(part)) {
+                const col = colLetterToIndex(part.match(/^[A-Z]+/)[0]);
+                const row = parseInt(part.match(/\d+$/)[0]) - 1;
+                if (col !== -1 && !isNaN(row) && row < table.rows.length && col < table.rows[row].length) {
+                    result.add(`${row}-${col}`);
+                }
+            } else if (/^[A-Z]+$/.test(part)) {
+                const col = colLetterToIndex(part);
+                if (col !== -1) {
+                    for (let r = 0; r < table.rows.length; r++) {
+                        if (col < table.rows[r].length) result.add(`${r}-${col}`);
+                    }
+                }
+            }
+        });
+        return result;
+    }
+
+    function applyCoordSelection(type) {
+        const inputEl = type === 'source' ? sourceCoordInput : type === 'target' ? targetCoordInput : refCoordInput;
+        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
+        const tables = type === 'source' ? sourceTables : type === 'target' ? targetTables : refTables;
+        const index = type === 'source' ? srcIdx : type === 'target' ? tgtIdx : refIdx;
+        const wrapper = type === 'source' ? sourcePreview : type === 'target' ? targetPreview : refPreview;
+        if (!tables.length) return toast('请先上传文档');
+        const table = tables[index];
+        const newCells = parseCoordInput(inputEl.value, table);
+        if (newCells.size === 0) { toast('坐标格式无效或区域为空'); return; }
+        cells.clear();
+        newCells.forEach(key => cells.add(key));
+        highlightCells(wrapper, cells);
+        toast(`已选中 ${cells.size} 个单元格`);
+    }
+
+    sourceCoordBtn.addEventListener('click', () => applyCoordSelection('source'));
+    targetCoordBtn.addEventListener('click', () => applyCoordSelection('target'));
+    refCoordBtn.addEventListener('click', () => applyCoordSelection('ref'));
+    sourceCoordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') applyCoordSelection('source'); });
+    targetCoordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') applyCoordSelection('target'); });
+    refCoordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') applyCoordSelection('ref'); });
+
+    function renderTable(container, table, type) {
+        container.innerHTML = '';
+        const tbl = document.createElement('table');
+        tbl.className = 'table-preview';
+        const colCount = table.rows[0]?.length || 0;
+        const hRow = document.createElement('tr');
+        hRow.innerHTML = '<th></th>';
+        for (let j = 0; j < colCount; j++) {
+            const th = document.createElement('th');
+            th.textContent = String.fromCharCode(65 + j);
+            th.addEventListener('click', (e) => {
+                e.stopPropagation();
+                handleColumnClick(type, j, e.ctrlKey || e.metaKey || type === 'ref');
+            });
+            hRow.appendChild(th);
+        }
+        tbl.appendChild(hRow);
+        for (let i = 0; i < table.rows.length; i++) {
+            const tr = document.createElement('tr');
+            const rh = document.createElement('th');
+            rh.className = 'row-header'; rh.textContent = i + 1;
+            tr.appendChild(rh);
+            for (let j = 0; j < table.rows[i].length; j++) {
+                const td = document.createElement('td');
+                td.textContent = table.rows[i][j].text;
+                td.dataset.row = i; td.dataset.col = j;
+                td.addEventListener('mousedown', (e) => startBoxSelect(e, type, container));
+                td.addEventListener('mousemove', (e) => updateBoxSelect(e, type));
+                td.addEventListener('touchstart', (e) => touchStartBox(e, type, container), {passive: false});
+                td.addEventListener('touchmove', (e) => touchMoveBox(e, type), {passive: false});
+                tr.appendChild(td);
+            }
+            tbl.appendChild(tr);
+        }
+        container.appendChild(tbl);
+        highlightCells(container, type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells);
+    }
+
+    function handleColumnClick(type, col, multiSelect) {
+        const wrapper = type === 'source' ? sourcePreview : type === 'target' ? targetPreview : refPreview;
+        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
+        const tables = type === 'source' ? sourceTables : type === 'target' ? targetTables : refTables;
+        const index = type === 'source' ? srcIdx : type === 'target' ? tgtIdx : refIdx;
+        const table = tables[index];
+        
+        if (type === 'ref') {
+            // 切换整列选中状态
+            const allSelected = Array.from({length: table.rows.length}, (_, r) => `${r}-${col}`).every(key => cells.has(key));
+            if (allSelected) {
+                for (let r = 0; r < table.rows.length; r++) cells.delete(`${r}-${col}`);
+            } else {
+                for (let r = 0; r < table.rows.length; r++) if (col < table.rows[r].length) cells.add(`${r}-${col}`);
+            }
+        } else {
+            if (!multiSelect) cells.clear();
+            for (let r = 0; r < table.rows.length; r++) {
+                if (col < table.rows[r].length) cells.add(`${r}-${col}`);
+            }
+        }
+        highlightCells(wrapper, cells);
+    }
+
+    function startBoxSelect(e, type, wrapper) {
+        if (!e.target.matches('td')) return;
+        e.preventDefault();
+        isSelecting = true;
+        currentType = type;
+        lastClientX = e.clientX;
+        lastClientY = e.clientY;
+        const ctrl = e.ctrlKey || e.metaKey;
+        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
+        if (type !== 'ref' && !ctrl) cells.clear();
+        const row = +e.target.dataset.row, col = +e.target.dataset.col;
+        const key = `${row}-${col}`;
+        if (type === 'ref') {
+            if (cells.has(key)) {
+                cells.delete(key);
+                touchDeleteMode = true;
+            } else {
+                cells.add(key);
+                touchDeleteMode = false;
+            }
+        } else {
+            cells.add(key);
+        }
+        highlightCells(wrapper, cells);
+    }
+
+    function updateBoxSelect(e, type) {
+        if (!isSelecting || currentType !== type || !e.target.matches('td')) return;
+        const deltaX = e.clientX - lastClientX;
+        const deltaY = e.clientY - lastClientY;
+        lastClientX = e.clientX;
+        lastClientY = e.clientY;
+        const wrapper = type === 'source' ? sourcePreview : type === 'target' ? targetPreview : refPreview;
+        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
+        const row = +e.target.dataset.row, col = +e.target.dataset.col;
+        const key = `${row}-${col}`;
+        if (deltaY > 0) {
+            if (type !== 'ref' || !touchDeleteMode) cells.add(key);
+            else cells.delete(key);
+            wrapper.scrollTop += 8;
+        } else if (deltaY < 0) {
+            if (type !== 'ref' || !touchDeleteMode) cells.delete(key);
+            else cells.add(key);
+            wrapper.scrollTop -= 8;
+        }
+        if (deltaX > 0) wrapper.scrollLeft += 8;
+        else if (deltaX < 0) wrapper.scrollLeft -= 8;
+        highlightCells(wrapper, cells);
+    }
+
+    function touchStartBox(e, type, wrapper) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        if (!target || !target.matches('td')) return;
+        isSelecting = true;
+        currentType = type;
+        lastClientX = touch.clientX;
+        lastClientY = touch.clientY;
+        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
+        const key = `${target.dataset.row}-${target.dataset.col}`;
+        
+        if (type === 'ref') {
+            if (cells.has(key)) {
+                cells.delete(key);
+                touchDeleteMode = true;
+            } else {
+                cells.add(key);
+                touchDeleteMode = false;
+            }
+        } else {
+            cells.clear();
+            cells.add(key);
+        }
+        highlightCells(wrapper, cells);
+    }
+
+    function touchMoveBox(e, type) {
+        if (!isSelecting || currentType !== type) return;
+        e.preventDefault();
+        const touch = e.touches[0];
+        const deltaX = touch.clientX - lastClientX;
+        const deltaY = touch.clientY - lastClientY;
+        lastClientX = touch.clientX;
+        lastClientY = touch.clientY;
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        if (!target || !target.matches('td')) return;
+        const wrapper = type === 'source' ? sourcePreview : type === 'target' ? targetPreview : refPreview;
+        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
+        const key = `${target.dataset.row}-${target.dataset.col}`;
+        
+        if (type === 'ref' && touchDeleteMode) {
+            cells.delete(key);
+        } else {
+            if (deltaY > 0) cells.add(key);
+            else if (deltaY < 0) cells.delete(key);
+        }
+        if (deltaY > 0) wrapper.scrollTop += 8;
+        else if (deltaY < 0) wrapper.scrollTop -= 8;
+        if (deltaX > 0) wrapper.scrollLeft += 8;
+        else if (deltaX < 0) wrapper.scrollLeft -= 8;
+        highlightCells(wrapper, cells);
+    }
+
+    window.addEventListener('mouseup', () => { isSelecting = false; touchDeleteMode = false; });
+    window.addEventListener('touchend', () => { isSelecting = false; touchDeleteMode = false; });
+
+    function highlightCells(wrapper, cells) {
+        wrapper.querySelectorAll('td').forEach(td => {
+            const key = `${td.dataset.row}-${td.dataset.col}`;
+            td.classList.toggle('selected', cells.has(key));
+        });
+    }
+
+    clearSelBtn.addEventListener('click', () => {
+        sourceCells.clear(); targetCells.clear(); refCells.clear();
+        [sourcePreview, targetPreview, refPreview].forEach(w => highlightCells(w, new Set()));
+        sourceCoordInput.value = ''; targetCoordInput.value = ''; refCoordInput.value = '';
+    });
+
+    sourceTableSel.addEventListener('change', () => { srcIdx = +sourceTableSel.value; sourceCells.clear(); renderTable(sourcePreview, sourceTables[srcIdx], 'source'); sourceCoordInput.value = ''; });
+    targetTableSel.addEventListener('change', () => { tgtIdx = +targetTableSel.value; targetCells.clear(); renderTable(targetPreview, targetTables[tgtIdx], 'target'); targetCoordInput.value = ''; });
+
+    extractBtn.addEventListener('click', () => {
+        if (!sourceCells.size) return toast('请在源表格框选区域');
+        const table = sourceTables[srcIdx].rows;
+        extractedData = [];
+        const sortedKeys = [...sourceCells].map(k => k.split('-').map(Number)).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
+        for (let [r,c] of sortedKeys) {
+            if (r < table.length && c < table[r].length) {
+                const txt = table[r][c].text;
+                if (txt) extractedData.push(txt);
+            }
+        }
+        if (!extractedData.length) return toast('所选区域无文本');
+        originalData = [...extractedData];
+        sortedData = [...extractedData];
+        renderSortList();
+        document.getElementById('sortCard').style.display = 'block';
+        info.textContent = `已提取 ${extractedData.length} 条`;
+        updateExportButton();
+    });
+
+    function editItem(index) {
+        const oldValue = sortedData[index];
+        const newValue = prompt('修改数据项内容：', oldValue);
+        if (newValue !== null) {
+            sortedData[index] = newValue.trim();
+            renderSortList();
+            toast('已更新数据项');
+        }
+    }
+
+    function renderSortList() {
+        sortListEl.innerHTML = '';
+        sortedData.forEach((item, idx) => {
+            const li = document.createElement('li');
+            li.className = 'sort-item';
+            if (item === '') li.classList.add('empty-slot');
+            li.draggable = true;
+            li.dataset.index = idx;
+            li.innerHTML = `
+                <span class="drag-handle">☰</span>
+                <span class="item-text" ondblclick="this.closest('.sort-item').querySelector('.edit-btn').click()">${item === '' ? '（空）' : item}</span>
+                <button class="edit-btn" data-index="${idx}">✏️ 编辑</button>
+            `;
+            li.querySelector('.edit-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                editItem(idx);
+            });
+            li.addEventListener('dragstart', handleDragStart);
+            li.addEventListener('dragover', e => e.preventDefault());
+            li.addEventListener('drop', handleDrop);
+            li.addEventListener('touchstart', handleTouchDragStart, {passive: false});
+            li.addEventListener('touchmove', handleTouchDragMove, {passive: false});
+            li.addEventListener('touchend', handleTouchDragEnd);
+            sortListEl.appendChild(li);
+        });
+        updateExportButton();
+    }
+
+    let dragSrcIndex = null;
+    function handleDragStart(e) { dragSrcIndex = +this.dataset.index; e.dataTransfer.effectAllowed = 'move'; }
+    function handleDrop(e) {
+        e.preventDefault();
+        const targetIndex = +this.dataset.index;
+        if (dragSrcIndex === null || targetIndex === dragSrcIndex) return;
+        const srcItem = sortedData[dragSrcIndex];
+        const targetItem = sortedData[targetIndex];
+        if (targetItem === '' && srcItem !== '') {
+            sortedData[targetIndex] = srcItem;
+            sortedData.splice(dragSrcIndex, 1);
+        } else {
+            [sortedData[dragSrcIndex], sortedData[targetIndex]] = [sortedData[targetIndex], sortedData[dragSrcIndex]];
+        }
+        renderSortList();
+        dragSrcIndex = null;
+    }
+
+    let touchDragItem = null, touchStartY = 0, touchPlaceholder = null, touchInitialIndex = -1;
+    function handleTouchDragStart(e) {
+        if (e.target.tagName === 'BUTTON') return;
+        touchDragItem = this;
+        touchInitialIndex = +touchDragItem.dataset.index;
+        const touch = e.touches[0];
+        touchStartY = touch.clientY;
+        touchDragItem.style.opacity = '0.6';
+        touchDragItem.style.background = '#e2e8f0';
+        touchPlaceholder = document.createElement('li');
+        touchPlaceholder.className = 'sort-item';
+        touchPlaceholder.style.height = touchDragItem.offsetHeight + 'px';
+        touchPlaceholder.style.background = '#e2e8f0';
+        sortListEl.insertBefore(touchPlaceholder, touchDragItem.nextSibling);
+        touchDragItem.style.position = 'absolute';
+        touchDragItem.style.zIndex = '10';
+        touchDragItem.style.width = sortListEl.offsetWidth - 20 + 'px';
+        document.body.style.userSelect = 'none';
+    }
+    function handleTouchDragMove(e) {
+        if (!touchDragItem) return;
+        e.preventDefault();
+        const touch = e.touches[0];
+        const diffY = touch.clientY - touchStartY;
+        touchDragItem.style.transform = `translateY(${diffY}px)`;
+        const children = [...sortListEl.children].filter(c => c !== touchDragItem);
+        let targetIdx = touchInitialIndex;
+        children.forEach((child, idx) => {
+            const rect = child.getBoundingClientRect();
+            if (touch.clientY > rect.top + child.offsetHeight / 2) targetIdx = idx + 1;
+        });
+        const targetChild = sortListEl.children[targetIdx];
+        sortListEl.insertBefore(touchPlaceholder, targetChild || null);
+    }
+    function handleTouchDragEnd() {
+        if (!touchDragItem) return;
+        touchDragItem.style.opacity = '1';
+        touchDragItem.style.position = '';
+        touchDragItem.style.zIndex = '';
+        touchDragItem.style.transform = '';
+        touchDragItem.style.width = '';
+        touchDragItem.style.background = '';
+        document.body.style.userSelect = '';
+        const newIndex = [...sortListEl.children].indexOf(touchPlaceholder);
+        if (newIndex !== -1 && newIndex !== touchInitialIndex) {
+            const moved = sortedData.splice(touchInitialIndex, 1)[0];
+            sortedData.splice(newIndex, 0, moved);
+        }
+        if (touchPlaceholder) { touchPlaceholder.remove(); touchPlaceholder = null; }
+        renderSortList();
+        touchDragItem = null;
+    }
+
+    async function handleRefUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (!['xlsx','docx'].includes(ext)) { toast('请选择 .xlsx 或 .docx 文件'); return; }
+        refName.textContent = file.name;
+        toast('解析中...');
+        try {
+            if (ext === 'xlsx') {
+                const buf = await file.arrayBuffer();
+                const wb = XLSX.read(buf, {type:'array'});
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+                refTables = [{ rows: rows.map(row => row.map(t => ({ text: String(t).trim() }))) }];
+            } else if (ext === 'docx') {
+                const zip = await JSZip.loadAsync(file);
+                const xml = await zip.file('word/document.xml')?.async('string');
+                refTables = parseAllTables(xml);
+            }
+            document.getElementById('refPreviewArea').style.display = 'block';
+            populateSelect(refTableSel, refTables.length);
+            renderTable(refPreview, refTables[0], 'ref');
+            refCoordInput.value = '';
+            toast('依据文档解析完成');
+        } catch(e) { toast('解析失败'); }
+        event.target.value = '';
+    }
+
+    refTableSel.addEventListener('change', () => { refIdx = +refTableSel.value; refCells.clear(); renderTable(refPreview, refTables[refIdx], 'ref'); refCoordInput.value = ''; });
+
+    function getRefPairs() {
+        const refTable = refTables[refIdx].rows;
+        const sortedKeys = [...refCells].map(k => k.split('-').map(Number)).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
+        const rowMap = new Map();
+        for (let [r,c] of sortedKeys) {
+            if (!rowMap.has(r)) rowMap.set(r, []);
+            rowMap.get(r).push(c);
+        }
+        const pairs = [];
+        for (let [r, cols] of rowMap) {
+            cols.sort((a,b)=>a-b);
+            if (cols.length >= 2) {
+                const c1 = cols[0], c2 = cols[1];
+                if (r < refTable.length && c1 < refTable[r].length && c2 < refTable[r].length) {
+                    const seq = parseFloat(refTable[r][c1].text);
+                    const name = refTable[r][c2].text;
+                    if (!isNaN(seq) && name) pairs.push({ seq, name });
+                }
+            }
+        }
+        return pairs;
+    }
+
+    applySortBtn.addEventListener('click', performExactSort);
+
+    function performExactSort() {
+        if (!refCells.size) return toast('请框选依据区域');
+        if (!sortedData.length) return toast('请先提取源数据');
+        const pairs = getRefPairs();
+        if (!pairs.length) return toast('所选区域无法构成两列');
+        pairs.sort((a,b) => a.seq - b.seq);
+        const matched = [], unmatched = [], used = new Set();
+        pairs.forEach(p => {
+            const idx = sortedData.indexOf(p.name);
+            if (idx !== -1 && !used.has(p.name)) { matched.push(p.name); used.add(p.name); }
+            else matched.push('');
+        });
+        sortedData.forEach(item => { if (!used.has(item)) unmatched.push(item); });
+        sortedData = [...matched, ...unmatched];
+        renderSortList();
+        const emptyCount = matched.filter(i => i === '').length;
+        refStatus.textContent = `精确匹配：留出 ${emptyCount} 个空位，${unmatched.length} 条未匹配排至末尾`;
+    }
+
+    function performFuzzySort(threshold) {
+        if (!refCells.size) return toast('请框选依据区域');
+        if (!sortedData.length) return toast('请先提取源数据');
+        const pairs = getRefPairs();
+        if (!pairs.length) return toast('所选区域无法构成两列');
+        pairs.sort((a,b) => a.seq - b.seq);
+        const available = [...sortedData], used = new Set(), matched = [], unmatched = [];
+        pairs.forEach(p => {
+            let bestIdx = -1, bestSim = 0;
+            for (let i = 0; i < available.length; i++) {
+                if (used.has(i)) continue;
+                const sim = similarity(available[i], p.name);
+                if (sim > bestSim) { bestSim = sim; bestIdx = i; }
+            }
+            if (bestIdx !== -1 && bestSim >= threshold) { matched.push(available[bestIdx]); used.add(bestIdx); }
+            else matched.push('');
+        });
+        available.forEach((item, i) => { if (!used.has(i)) unmatched.push(item); });
+        sortedData = [...matched, ...unmatched];
+        renderSortList();
+        const emptyCount = matched.filter(i => i === '').length;
+        const percent = Math.round(threshold * 100);
+        refStatus.textContent = `模糊匹配≥${percent}%：留出 ${emptyCount} 个空位，${unmatched.length} 条未匹配排至末尾`;
+        toast(`模糊匹配≥${percent}%完成：${matched.length - emptyCount} 条匹配`);
+    }
+
+    fuzzySort90Btn.addEventListener('click', () => performFuzzySort(0.9));
+    fuzzySort75Btn.addEventListener('click', () => performFuzzySort(0.75));
+    fuzzyCustomBtn.addEventListener('click', () => {
+        let val = parseInt(fuzzyThreshold.value, 10);
+        if (isNaN(val) || val < 20 || val > 95) { toast('相似度阈值需在20-95之间'); return; }
+        performFuzzySort(val / 100);
+    });
+
+    function similarity(a, b) {
+        if (!a && !b) return 1;
+        if (!a || !b) return 0;
+        const maxLen = Math.max(a.length, b.length);
+        if (maxLen === 0) return 1;
+        const dist = editDistance(a, b);
+        return 1 - dist / maxLen;
+    }
+
+    function editDistance(s1, s2) {
+        s1 = s1.toLowerCase(); s2 = s2.toLowerCase();
+        const len1 = s1.length, len2 = s2.length;
+        const matrix = [];
+        for (let i = 0; i <= len1; i++) matrix[i] = [i];
+        for (let j = 0; j <= len2; j++) matrix[0][j] = j;
+        for (let i = 1; i <= len1; i++) {
+            for (let j = 1; j <= len2; j++) {
+                if (s1.charAt(i - 1) === s2.charAt(j - 1)) {
+                    matrix[i][j] = matrix[i - 1][j - 1];
+                } else {
+                    matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
+                }
+            }
+        }
+        return matrix[len1][len2];
+    }
+
+    resetBtn.addEventListener('click', () => { sortedData = [...originalData]; renderSortList(); });
+
+    // 导出优化
     exportBtn.addEventListener('click', async () => {
         if (!targetZip || !targetXml) return toast('缺失目标文档');
         if (!sortedData.length) return toast('无排序数据');
@@ -264,15 +918,12 @@
         const fileName = (exportFileName.value.trim() || '排序替换结果') + '.docx';
         const file = new File([blob], fileName, {type: blob.type});
 
-        // 检测微信/QQ环境
         const ua = navigator.userAgent.toLowerCase();
         const isWxOrQQ = /micromessenger|qq\//i.test(ua);
         if (isWxOrQQ) {
-            toast('建议点击右上角“在浏览器打开”后导出', 3000);
-            // 仍然尝试触发下载（部分安卓微信可以）
+            toast('微信/QQ内可能无法下载，请点击右上角“在浏览器打开”', 3000);
             downloadFile(blob, fileName);
         } else {
-            // 非微信环境，优先分享
             if (navigator.share && navigator.canShare && navigator.canShare({files: [file]})) {
                 try {
                     await navigator.share({ title: fileName, files: [file] });
@@ -297,14 +948,32 @@
         toast('下载已开始，如未成功请使用浏览器打开本页面');
     }
 
-    // 初始检测微信并显示提示
+    function setCellText(cellXml, newText) {
+        const ps = cellXml.getElementsByTagNameNS('*', 'p');
+        if (ps.length) {
+            const p = ps[0];
+            while (p.firstChild) p.removeChild(p.firstChild);
+            const doc = p.ownerDocument;
+            const r = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'r');
+            const t = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 't');
+            t.setAttribute('xml:space','preserve'); t.textContent = newText;
+            r.appendChild(t); p.appendChild(r);
+            for (let i=1; i<ps.length; i++) ps[i].parentNode?.removeChild(ps[i]);
+        } else {
+            const doc = cellXml.ownerDocument;
+            const p = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'p');
+            const r = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'r');
+            const t = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 't');
+            t.textContent = newText; r.appendChild(t); p.appendChild(r); cellXml.appendChild(p);
+        }
+    }
+
+    // 初始检测微信/QQ并显示警告
     (function() {
         const ua = navigator.userAgent.toLowerCase();
         const isWxOrQQ = /micromessenger|qq\//i.test(ua);
         document.getElementById('warnWx').style.display = isWxOrQQ ? 'block' : 'none';
     })();
-
-    // 其他所有函数（框选、坐标、排序等）请保持与之前完整版本一致 ...
 })();
 </script>
 </body>
