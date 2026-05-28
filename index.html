@@ -1,958 +1,1174 @@
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>表格排序替换</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-    <style>
-        :root {
-            --bg: #f8fafc; --card-bg: #ffffff; --primary: #5b6af0;
-            --success: #10b981; --text: #1e293b; --text-secondary: #64748b;
-            --border: #e2e8f0; --radius: 12px;
-        }
-        * { margin:0; padding:0; box-sizing:border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
-            background: var(--bg); color: var(--text); padding: 12px;
-            display: flex; justify-content: center; min-height: 100vh;
-            -webkit-tap-highlight-color: transparent;
-        }
-        .container { width: 100%; max-width: 1000px; display: flex; flex-direction: column; gap: 16px; }
-        .card {
-            background: var(--card-bg); border-radius: var(--radius); padding: 16px;
-            border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        }
-        h3 { font-size: 1rem; margin-bottom: 8px; }
-        .upload-row { display: flex; gap: 12px; flex-wrap: wrap; }
-        .upload-box {
-            flex: 1; min-width: 150px; border: 2px dashed #cbd5e1; border-radius: var(--radius);
-            padding: 14px 8px; text-align: center; cursor: pointer; background: #fafbfc; touch-action: manipulation;
-        }
-        .upload-box:active { background: #eef2ff; border-color: var(--primary); }
-        .upload-box .icon { font-size: 28px; display: block; }
-        .upload-box p { font-size: 0.8rem; margin:4px 0 0; color:var(--text-secondary); }
-        .upload-box .file-name { font-size:0.75rem; color:var(--primary); margin-top:4px; font-weight:600; }
-        .upload-box input[type="file"] { display: none; }
-
-        .table-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
-        .table-toolbar select { padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; }
-        .coord-input {
-            padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px;
-            font-size: 0.75rem; width: 110px; max-width: 30vw;
-        }
-        .coord-btn {
-            padding: 5px 10px; font-size: 0.75rem; border-radius: 6px; border: 1px solid var(--primary);
-            background: #fff; color: var(--primary); cursor: pointer; touch-action: manipulation;
-        }
-        .table-preview-wrapper {
-            overflow: auto; max-height: 300px; border: 1px solid var(--border);
-            border-radius: 8px; user-select: none; -webkit-overflow-scrolling: touch;
-            touch-action: pan-x pan-y; position: relative;
-        }
-        .table-preview {
-            border-collapse: collapse; width: max-content; min-width: 100%; font-size: 0.8rem;
-        }
-        .table-preview td, .table-preview th {
-            border: 1px solid #ddd; padding: 6px 8px; text-align: left; white-space: nowrap;
-        }
-        .table-preview th { background: #f1f5f9; cursor: pointer; }
-        .table-preview td.selected, .table-preview th.selected { background: #dbeafe !important; }
-        .row-header { cursor: pointer; min-width: 30px; text-align: center; }
-
-        .sort-list {
-            list-style: none; max-height: 250px; overflow-y: auto;
-            border: 1px solid var(--border); border-radius: 8px; -webkit-overflow-scrolling: touch;
-        }
-        .sort-item {
-            display: flex; align-items: center; gap: 10px; padding: 8px 12px;
-            background: #fff; border-bottom: 1px solid #f1f5f9; cursor: grab; touch-action: none;
-        }
-        .sort-item.empty-slot { color: #94a3b8; font-style: italic; }
-        .sort-item .drag-handle { color: #94a3b8; cursor: grab; }
-        .sort-item .item-text { flex: 1; font-size: 0.9rem; user-select: none; }
-        .sort-item .edit-btn {
-            background: none; border: 1px solid #cbd5e1; border-radius: 4px;
-            padding: 2px 6px; font-size: 0.8rem; cursor: pointer; color: #64748b; touch-action: manipulation;
-        }
-        .sort-item .edit-btn:hover { background: #f1f5f9; color: #1e293b; }
-
-        .btn {
-            padding: 10px 16px; border: none; border-radius: 8px; font-size: 0.9rem;
-            font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
-            transition: 0.2s; touch-action: manipulation;
-        }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-primary { background: var(--primary); color: #fff; }
-        .btn-success { background: var(--success); color: #fff; }
-        .btn-outline { background: #fff; color: var(--primary); border: 2px solid var(--primary); }
-        .btn-sm { padding: 8px 12px; font-size: 0.8rem; }
-        .toast {
-            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px);
-            background: #1e293b; color: #fff; padding: 12px 24px; border-radius: 30px;
-            font-size: 0.85rem; z-index: 999; transition: 0.3s; pointer-events: none;
-            white-space: nowrap;
-        }
-        .toast.show { transform: translateX(-50%) translateY(0); }
-        .export-inline {
-            display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center;
-        }
-        .export-inline input {
-            padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px;
-            font-size: 0.9rem; width: 200px; max-width: 100%;
-        }
-        .sort-btns { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-        .threshold-input {
-            width: 70px; padding: 8px; border: 2px solid var(--border); border-radius: 8px;
-            font-size: 0.85rem; text-align: center;
-        }
-        .warn-text {
-            font-size: 0.7rem; color: #dc2626; margin-top: 6px; text-align: center; display: none;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<title>手势交互粒子系统</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #000;
+    overflow: hidden;
+    font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: default;
+  }
+  #mainCanvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 1;
+  }
+  #video {
+    position: fixed;
+    top: -9999px; left: -9999px;
+    width: 1px; height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  #previewContainer {
+    position: fixed;
+    bottom: 20px; right: 20px;
+    width: 260px; height: 195px;
+    border-radius: 12px;
+    overflow: hidden;
+    z-index: 10;
+    border: 2px solid rgba(0, 255, 200, 0.4);
+    box-shadow: 0 0 20px rgba(0, 255, 200, 0.2), 0 0 60px rgba(0, 200, 255, 0.1);
+    background: rgba(0, 0, 0, 0.6);
+    transition: opacity 0.5s;
+  }
+  #previewCanvas {
+    width: 100%; height: 100%;
+    display: block;
+    transform: scaleX(-1);
+  }
+  #uiOverlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 5;
+  }
+  #gestureLabel {
+    position: absolute;
+    top: 30px; left: 30px;
+    font-size: 28px;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 0 0 20px rgba(0, 255, 200, 0.8), 0 0 40px rgba(0, 200, 255, 0.5);
+    transition: all 0.3s ease;
+    letter-spacing: 2px;
+  }
+  #scaleIndicator {
+    position: absolute;
+    top: 30px; right: 30px;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+    background: rgba(0, 0, 0, 0.4);
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 1px solid rgba(0, 255, 200, 0.2);
+    text-shadow: 0 0 8px rgba(0, 255, 200, 0.5);
+    letter-spacing: 1px;
+    transition: all 0.3s ease;
+  }
+  #guideBox {
+    position: absolute;
+    bottom: 50%; left: 50%;
+    transform: translate(-50%, 50%);
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(0, 255, 200, 0.3);
+    border-radius: 16px;
+    padding: 24px 32px;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 14px;
+    line-height: 2;
+    box-shadow: 0 0 40px rgba(0, 255, 200, 0.1);
+    transition: opacity 0.8s ease;
+    pointer-events: auto;
+    text-align: center;
+    max-width: 380px;
+  }
+  #guideBox .title {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #0ff;
+    text-shadow: 0 0 10px rgba(0, 255, 255, 0.6);
+  }
+  #guideBox .item { margin: 4px 0; }
+  #guideBox .gesture-icon { font-size: 18px; margin-right: 4px; }
+  #guideBox button {
+    margin-top: 14px;
+    padding: 8px 28px;
+    border: 1px solid rgba(0, 255, 200, 0.5);
+    border-radius: 20px;
+    background: rgba(0, 255, 200, 0.1);
+    color: #0ff;
+    font-size: 14px;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: all 0.3s;
+    font-family: inherit;
+  }
+  #guideBox button:hover {
+    background: rgba(0, 255, 200, 0.25);
+    box-shadow: 0 0 20px rgba(0, 255, 200, 0.3);
+  }
+  #loadingOverlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: #000;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.5s ease;
+  }
+  #loadingOverlay .spinner {
+    width: 50px; height: 50px;
+    border: 3px solid rgba(0, 255, 200, 0.2);
+    border-top-color: #0ff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loadingOverlay .text {
+    color: rgba(255,255,255,0.7);
+    font-size: 14px;
+    letter-spacing: 2px;
+  }
+  @media (max-width: 768px) {
+    #previewContainer {
+      top: 10px; right: 10px; bottom: auto; left: auto;
+      width: 130px; height: 98px;
+      border-radius: 8px;
+      border-width: 1px;
+    }
+    #gestureLabel {
+      top: 10px; left: 12px;
+      font-size: 16px;
+      letter-spacing: 1px;
+    }
+    #scaleIndicator {
+      top: 115px; right: 12px;
+      font-size: 11px;
+      padding: 4px 10px;
+    }
+    #guideBox {
+      padding: 16px 20px;
+      font-size: 12px;
+      line-height: 1.7;
+      max-width: 280px;
+    }
+    #guideBox .title { font-size: 15px; }
+    #loadingOverlay .text { font-size: 12px; }
+    #loadingOverlay .spinner { width: 36px; height: 36px; }
+    body { touch-action: none; }
+  }
+</style>
 </head>
 <body>
-<div class="container">
-    <div style="text-align:center; padding:8px 0;">
-        <span style="font-size:32px;">📄⚡📊⚡📄</span>
-        <h2 style="font-size:1.4rem;">表格排序替换 · 列头框选整列</h2>
-        <p style="color:#64748b;">点击列头选中/取消整列；单元格单击切换</p>
-    </div>
 
-    <!-- 上传 -->
-    <div class="card">
-        <h3>📤 上传源文档与目标文档 (.docx)</h3>
-        <div class="upload-row">
-            <div class="upload-box" id="sourceBox">
-                <span class="icon">📎</span><p>源文档</p>
-                <div class="file-name" id="sourceName"></div>
-                <input type="file" id="sourceFile">
-            </div>
-            <div class="upload-box" id="targetBox">
-                <span class="icon">📌</span><p>目标文档</p>
-                <div class="file-name" id="targetName"></div>
-                <input type="file" id="targetFile">
-            </div>
-        </div>
-        <p style="font-size:0.7rem; color:#94a3b8; margin-top:6px;">
-            💡 点击后选择“文件”，微信/QQ中可看到“聊天记录”选项
-        </p>
-    </div>
-
-    <!-- 表格预览与选择 -->
-    <div class="card" id="previewCard" style="display:none;">
-        <h3>👁️ 源表格 & 目标表格 · 列头框选/单元格切换</h3>
-        <div style="display:flex; gap:12px; flex-wrap:wrap;">
-            <div style="flex:1; min-width:300px;">
-                <div class="table-toolbar">
-                    <label>源表格</label><select id="sourceTableSel"></select>
-                    <span style="font-size:0.7rem;">坐标:</span>
-                    <input type="text" class="coord-input" id="sourceCoordInput" placeholder="如 A,B 或 A1:B3">
-                    <button class="coord-btn" id="sourceCoordBtn">应用</button>
-                </div>
-                <div class="table-preview-wrapper" id="sourcePreview"></div>
-            </div>
-            <div style="flex:1; min-width:300px;">
-                <div class="table-toolbar">
-                    <label>目标表格</label><select id="targetTableSel"></select>
-                    <span style="font-size:0.7rem;">坐标:</span>
-                    <input type="text" class="coord-input" id="targetCoordInput" placeholder="如 A,B 或 A1:B3">
-                    <button class="coord-btn" id="targetCoordBtn">应用</button>
-                </div>
-                <div class="table-preview-wrapper" id="targetPreview"></div>
-            </div>
-        </div>
-        <div style="display:flex; gap:8px; margin-top:8px;">
-            <button class="btn btn-primary btn-sm" id="extractBtn">✅ 提取数据</button>
-            <button class="btn btn-outline btn-sm" id="clearSelBtn">🔄 清除选择</button>
-        </div>
-    </div>
-
-    <!-- 排序依据 -->
-    <div class="card" id="sortRefCard" style="display:none;">
-        <h3>📊 排序依据 (Excel/Word) · 列头框选整列</h3>
-        <div class="upload-row" style="margin-bottom:12px;">
-            <div class="upload-box" id="refBox">
-                <span class="icon">📋</span><p>排序依据文档</p>
-                <div class="file-name" id="refName"></div>
-                <input type="file" id="refFile">
-            </div>
-        </div>
-        <div id="refPreviewArea" style="display:none;">
-            <div class="table-toolbar">
-                <label>依据表格</label><select id="refTableSel"></select>
-                <span style="font-size:0.7rem;">坐标:</span>
-                <input type="text" class="coord-input" id="refCoordInput" placeholder="如 A,B 或 A1:B3">
-                <button class="coord-btn" id="refCoordBtn">应用</button>
-            </div>
-            <div class="table-preview-wrapper" id="refPreview" style="max-height:200px;"></div>
-            <div style="margin-top:6px;">
-                <div class="sort-btns">
-                    <button class="btn btn-sm btn-primary" id="applySortBtn">精确匹配</button>
-                    <button class="btn btn-sm btn-outline" id="fuzzySort90Btn">模糊 ≥90%</button>
-                    <button class="btn btn-sm btn-outline" id="fuzzySort75Btn">模糊 ≥75%</button>
-                    <input type="number" id="fuzzyThreshold" class="threshold-input" value="90" min="20" max="95" step="1">
-                    <span style="font-size:0.8rem;">%</span>
-                    <button class="btn btn-sm btn-outline" id="fuzzyCustomBtn">自定义阈值</button>
-                </div>
-                <span id="refStatus" style="font-size:0.75rem; color:#64748b; margin-top:4px; display:inline-block;"></span>
-            </div>
-        </div>
-    </div>
-
-    <!-- 排序列表 -->
-    <div class="card" id="sortCard" style="display:none;">
-        <h3>📋 排序列表（拖拽、双击编辑、拖入空位填充）</h3>
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <span id="info"></span>
-            <button class="btn btn-sm btn-outline" id="resetBtn">恢复原始</button>
-        </div>
-        <ul class="sort-list" id="sortList"></ul>
-    </div>
-
-    <!-- 导出与分享 -->
-    <div class="card" id="exportCard">
-        <h3>📤 导出并分享</h3>
-        <div class="export-inline">
-            <input type="text" id="exportFileName" value="排序替换结果" placeholder="文件名">
-            <button class="btn btn-success" id="exportBtn" disabled>📄 导出分享到微信/QQ</button>
-        </div>
-        <p style="font-size:0.75rem; color:#64748b; margin-top:6px;">
-            仅替换文本，保留原格式；空位清空。提取数据后按钮启用。
-        </p>
-        <p class="warn-text" id="warnWx">
-            ⚠️ 微信/QQ中可能无法直接下载，请点击右上角“在浏览器打开”后导出。
-        </p>
-    </div>
+<canvas id="mainCanvas"></canvas>
+<video id="video" playsinline autoplay></video>
+<div id="previewContainer">
+  <canvas id="previewCanvas" width="320" height="240"></canvas>
 </div>
-<div class="toast" id="toast"></div>
+<div id="uiOverlay">
+  <div id="gestureLabel">等待手势…</div>
+  <div id="scaleIndicator">缩放: 100%</div>
+  <div id="guideBox">
+    <div class="title">手势交互说明</div>
+    <div class="item"><span class="gesture-icon">🖐</span> 张合手掌 — 粒子缩放 & 移动</div>
+    <div class="item"><span class="gesture-icon">✌️</span> 对勾/剪刀手 — 显示"爱你"</div>
+    <div class="item"><span class="gesture-icon">👍</span> 点赞 — 显示"谢谢！"</div>
+    <div class="item"><span class="gesture-icon">✊</span> 握拳→张开×2 — 触发祝福文字</div>
+    <div class="item"><span class="gesture-icon">👌</span> OK手势 — 重置粒子</div>
+    <div class="item"><span class="gesture-icon">🔄</span> 快速翻手 — 切换主题色</div>
+    <button id="guideCloseBtn">开始体验</button>
+  </div>
+</div>
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="text">加载手势识别模型…</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
 
 <script>
-(() => {
-    // 全局状态
-    let sourceZip, targetZip, sourceXml, targetXml;
-    let sourceTables = [], targetTables = [], refTables = [];
-    let srcIdx = 0, tgtIdx = 0, refIdx = 0;
-    let sourceCells = new Set(), targetCells = new Set(), refCells = new Set();
-    let extractedData = [], sortedData = [], originalData = [];
-    let currentType = null;
-    let lastClientX = null, lastClientY = null;
-    let isSelecting = false;
-    let touchDeleteMode = false;
+(function() {
+  // ─────────────────────────────────────
+  // DOM refs
+  // ─────────────────────────────────────
+  const mainCanvas = document.getElementById('mainCanvas');
+  const ctx = mainCanvas.getContext('2d');
+  const videoEl = document.getElementById('video');
+  const previewCanvas = document.getElementById('previewCanvas');
+  const previewCtx = previewCanvas.getContext('2d');
+  const gestureLabel = document.getElementById('gestureLabel');
+  const scaleIndicator = document.getElementById('scaleIndicator');
+  const guideBox = document.getElementById('guideBox');
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  const guideCloseBtn = document.getElementById('guideCloseBtn');
+  const previewContainer = document.getElementById('previewContainer');
 
-    const sourceFile = document.getElementById('sourceFile');
-    const targetFile = document.getElementById('targetFile');
-    const refFile = document.getElementById('refFile');
-    const sourceName = document.getElementById('sourceName');
-    const targetName = document.getElementById('targetName');
-    const refName = document.getElementById('refName');
-    const sourcePreview = document.getElementById('sourcePreview');
-    const targetPreview = document.getElementById('targetPreview');
-    const refPreview = document.getElementById('refPreview');
-    const sourceTableSel = document.getElementById('sourceTableSel');
-    const targetTableSel = document.getElementById('targetTableSel');
-    const refTableSel = document.getElementById('refTableSel');
-    const extractBtn = document.getElementById('extractBtn');
-    const clearSelBtn = document.getElementById('clearSelBtn');
-    const applySortBtn = document.getElementById('applySortBtn');
-    const fuzzySort90Btn = document.getElementById('fuzzySort90Btn');
-    const fuzzySort75Btn = document.getElementById('fuzzySort75Btn');
-    const fuzzyCustomBtn = document.getElementById('fuzzyCustomBtn');
-    const fuzzyThreshold = document.getElementById('fuzzyThreshold');
-    const sortListEl = document.getElementById('sortList');
-    const info = document.getElementById('info');
-    const resetBtn = document.getElementById('resetBtn');
-    const exportBtn = document.getElementById('exportBtn');
-    const exportFileName = document.getElementById('exportFileName');
-    const toastEl = document.getElementById('toast');
-    const refStatus = document.getElementById('refStatus');
+  // ─────────────────────────────────────
+  // Configuration
+  // ─────────────────────────────────────
+  const PARTICLE_COUNT = 400;
+  let isMobile = false;
+  let effectiveParticleCount = PARTICLE_COUNT;
+  let effectiveStarCount = 200;
+  let glowScale = 1;
+  let shadowScale = 1;
 
-    const sourceCoordInput = document.getElementById('sourceCoordInput');
-    const targetCoordInput = document.getElementById('targetCoordInput');
-    const refCoordInput = document.getElementById('refCoordInput');
-    const sourceCoordBtn = document.getElementById('sourceCoordBtn');
-    const targetCoordBtn = document.getElementById('targetCoordBtn');
-    const refCoordBtn = document.getElementById('refCoordBtn');
+  function updateMobileConfig(w) {
+    isMobile = w < 768;
+    effectiveParticleCount = isMobile ? 200 : PARTICLE_COUNT;
+    effectiveStarCount = isMobile ? 80 : 200;
+    glowScale = isMobile ? 0.6 : 1;
+    shadowScale = isMobile ? 0.55 : 1;
+  }
+  const SMOOTHING_FRAMES = 5;
+  const GESTURE_DEBOUNCE_MS = 200;
+  const FIST_HOLD_MS = 300;
+  const SEQUENCE_TIMEOUT_MS = 5000;
+  const TRANSITION_WINDOW_MS = 500;
+  const TEXT_DISPLAY_MS = 3000;
 
-    function toast(msg, duration = 2000) {
-        toastEl.textContent = msg;
-        toastEl.classList.add('show');
-        setTimeout(() => toastEl.classList.remove('show'), duration);
+  // ─────────────────────────────────────
+  // State
+  // ─────────────────────────────────────
+  let W, H;
+  const state = {
+    // Hand tracking
+    landmarksRaw: null,
+    landmarksHistory: [],
+    landmarksSmoothed: null,
+    handedness: null,
+    openness: 0,
+    opennessSmoothed: 0,
+    handCenterX: 0.5,
+    handCenterY: 0.5,
+    handCenterSmoothedX: 0.5,
+    handCenterSmoothedY: 0.5,
+    handDetected: false,
+
+    // Gesture detection
+    currentGesture: 'none',
+    gestureDebounceEnd: 0,
+    gestureStableFrames: 0,
+
+    // Fist detection
+    fistStartTime: 0,
+    fistConfirmed: false,
+    fistConfirmedTime: 0,
+
+    // Fist→Open sequence
+    fistOpenCounter: 0,
+    fistOpenLastTime: 0,
+    sequenceActive: false,
+
+    // Finger states
+    fingersExtended: [false, false, false, false, false],
+
+    // Flip detection
+    flipMetricHistory: [],
+    flipCooldown: 0,
+
+    // Color theme
+    themeIndex: 0,
+
+    // Particle system
+    particles: [],
+    globalScale: 1,
+    targetScale: 1,
+    globalOffsetX: 0,
+    targetOffsetX: 0,
+    globalOffsetY: 0,
+    targetOffsetY: 0,
+    textMode: null,          // null | 'aini' | 'xiexie' | 'zhuni'
+    textTimer: 0,
+    textTransition: 0,       // 0→1 during text enter, 1→0 during text exit
+
+    // Time
+    lastTime: performance.now(),
+  };
+
+  // ─────────────────────────────────────
+  // Resize
+  // ─────────────────────────────────────
+  function resize() {
+    W = window.innerWidth;
+    H = window.innerHeight;
+    updateMobileConfig(W);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    mainCanvas.width = Math.floor(W * dpr);
+    mainCanvas.height = Math.floor(H * dpr);
+    mainCanvas.style.width = W + 'px';
+    mainCanvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  let resizeDebounce = null;
+  function handleResize() {
+    if (resizeDebounce) clearTimeout(resizeDebounce);
+    resizeDebounce = setTimeout(() => {
+      const wasMobile = isMobile;
+      resize();
+      if (isMobile !== wasMobile) {
+        state.particles = createParticles();
+      }
+    }, 300);
+  }
+  window.addEventListener('resize', handleResize);
+  window.addEventListener('orientationchange', handleResize);
+  resize();
+
+  // ─────────────────────────────────────
+  // Particle initialization
+  // ─────────────────────────────────────
+  function createParticles() {
+    const particles = [];
+    const cx = W / 2, cy = H / 2;
+    const maxR = Math.min(W, H) * 0.42;
+    for (let i = 0; i < effectiveParticleCount; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = Math.pow(Math.random(), 0.5) * maxR;
+      const bx = cx + Math.cos(angle) * radius;
+      const by = cy + Math.sin(angle) * radius;
+      const hueOff = (Math.random() - 0.5) * 80;
+      particles.push({
+        baseX: bx,
+        baseY: by,
+        x: bx,
+        y: by,
+        vx: 0, vy: 0,
+        tx: bx, ty: by,
+        size: 1.2 + Math.random() * 3.5,
+        hueOffset: hueOff,
+        saturation: 0.65 + Math.random() * 0.35,
+        lightness: 0.45 + Math.random() * 0.35,
+        alpha: 0.55 + Math.random() * 0.45,
+        phase: Math.random() * Math.PI * 2,
+        freq: 0.2 + Math.random() * 0.8,
+        amp: 5 + Math.random() * 40,
+        glowSize: 2 + Math.random() * 6,
+      });
+    }
+    return particles;
+  }
+
+  state.particles = createParticles();
+
+  // ─────────────────────────────────────
+  // Utility functions
+  // ─────────────────────────────────────
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function dist2d(x1, y1, x2, y2) {
+    const dx = x1 - x2, dy = y1 - y2;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+  function dist3d(l1, l2) {
+    const dx = l1.x - l2.x, dy = l1.y - l2.y, dz = (l1.z || 0) - (l2.z || 0);
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+
+  // ─────────────────────────────────────
+  // Color themes
+  // ─────────────────────────────────────
+  const THEMES = [
+    { baseHue: 190, name: 'cyan' },
+    { baseHue: 315, name: 'magenta' },
+    { baseHue: 48, name: 'gold' },
+  ];
+
+  function getThemeColor(particle) {
+    const theme = THEMES[state.themeIndex % THEMES.length];
+    const h = ((theme.baseHue + particle.hueOffset) % 360 + 360) % 360;
+    return {
+      h,
+      s: particle.saturation,
+      l: particle.lightness,
+      a: particle.alpha,
+      hsl: `hsl(${h}, ${particle.saturation * 100}%, ${particle.lightness * 100}%)`,
+      hsla: (a) => `hsla(${h}, ${particle.saturation * 100}%, ${particle.lightness * 100}%, ${a !== undefined ? a : particle.alpha})`,
+    };
+  }
+
+  // ─────────────────────────────────────
+  // Finger extension detection
+  // ─────────────────────────────────────
+  function isFingerExtended(lm, tipIdx, pipIdx, mcpIdx, wristIdx) {
+    const tipDist = dist3d(lm[tipIdx], lm[wristIdx]);
+    const pipDist = dist3d(lm[pipIdx], lm[wristIdx]);
+    return tipDist > pipDist * 1.02; // more lenient
+  }
+
+  // Check if finger is curled (tip closer to wrist than pip)
+  function isFingerCurled(lm, tipIdx, pipIdx, wristIdx) {
+    const tipDist = dist3d(lm[tipIdx], lm[wristIdx]);
+    const pipDist = dist3d(lm[pipIdx], lm[wristIdx]);
+    return tipDist < pipDist * 0.98;
+  }
+
+  function isThumbUp(lm) {
+    return lm[4].y < lm[3].y - 0.015 && lm[4].y < lm[2].y - 0.01;
+  }
+
+  function isThumbExtended(lm) {
+    const tipWrist = dist3d(lm[4], lm[0]);
+    const ipWrist = dist3d(lm[3], lm[0]);
+    return tipWrist > ipWrist * 1.04;
+  }
+
+  // ─────────────────────────────────────
+  // Openness calculation
+  // ─────────────────────────────────────
+  function calcOpenness(lm) {
+    // Palm center: average of all MCP joints
+    const mcpIndices = [2, 5, 9, 13, 17];
+    let cx = 0, cy = 0, cz = 0;
+    mcpIndices.forEach(i => { cx += lm[i].x; cy += lm[i].y; cz += (lm[i].z || 0); });
+    cx /= 5; cy /= 5; cz /= 5;
+    const palmCenter = { x: cx, y: cy, z: cz };
+
+    // Tip indices
+    const tipIndices = [4, 8, 12, 16, 20];
+    let avgDist = 0;
+    tipIndices.forEach(i => {
+      avgDist += dist3d(lm[i], palmCenter);
+    });
+    avgDist /= 5;
+
+    // Normalize: typical range is ~0.1 (fist) to ~0.45 (fully open)
+    const minD = 0.08, maxD = 0.45;
+    return clamp((avgDist - minD) / (maxD - minD), 0, 1);
+  }
+
+  // ─────────────────────────────────────
+  // Gesture detection
+  // ─────────────────────────────────────
+  function detectGestures(lm) {
+    if (!lm) return 'none';
+
+    const fingers = [];
+    fingers[0] = isThumbExtended(lm);
+    fingers[1] = isFingerExtended(lm, 8, 6, 5, 0);
+    fingers[2] = isFingerExtended(lm, 12, 10, 9, 0);
+    fingers[3] = isFingerExtended(lm, 16, 14, 13, 0);
+    fingers[4] = isFingerExtended(lm, 20, 18, 17, 0);
+
+    // Curled check (more robust than !extended)
+    const curled = [
+      isFingerCurled(lm, 4, 3, 0),
+      isFingerCurled(lm, 8, 6, 0),
+      isFingerCurled(lm, 12, 10, 0),
+      isFingerCurled(lm, 16, 14, 0),
+      isFingerCurled(lm, 20, 18, 0),
+    ];
+
+    state.fingersExtended = fingers;
+    const extCount = fingers.filter(Boolean).length;
+    const curlCount = curled.filter(Boolean).length;
+    const openness = state.opennessSmoothed;
+
+    // ── V-sign (对勾/剪刀手): index+middle extended, ring+pinky curled ──
+    const idxMidDist = dist3d(lm[8], lm[12]);
+    const isVSign = (
+      fingers[1] && fingers[2] &&        // index + middle extended
+      curled[3] && curled[4] &&           // ring + pinky curled
+      idxMidDist > 0.04                   // spread apart (relaxed threshold)
+    );
+    if (isVSign) return 'vsign';
+
+    // ── Hand orientation: knuckle line angle ──
+    // Horizontal (< 35°) = back of hand up → 握拳
+    // Vertical (> 55°) = back of hand sideways → 点赞 candidate
+    const dxKn = lm[17].x - lm[5].x;
+    const dyKn = lm[17].y - lm[5].y;
+    const knuckleDeg = Math.abs(Math.atan2(dyKn, dxKn) * 180 / Math.PI);
+
+    // ── Fist: curled hand, knuckles horizontal (back of hand up) ──
+    if (openness < 0.2 && curlCount >= 4 && knuckleDeg < 35) return 'fist';
+
+    // ── Thumbs up: curled hand, knuckles vertical (back of hand sideways), thumb up ──
+    const thumbUp = isThumbUp(lm) && fingers[0];
+    const othersAllCurled = curled[1] && curled[2] && curled[3] && curled[4];
+    if (thumbUp && othersAllCurled && knuckleDeg > 55) return 'thumbsUp';
+
+    // ── OK gesture ──
+    const thumbIdxClose = dist3d(lm[4], lm[8]) < 0.06;
+    if (thumbIdxClose && fingers[2] && fingers[3] && fingers[4] && !fingers[1]) return 'ok';
+
+    // ── Open palm ──
+    if (openness > 0.75 && extCount >= 4) return 'openPalm';
+
+    return 'none';
+  }
+
+  // ─────────────────────────────────────
+  // Text content registry
+  // ─────────────────────────────────────
+  const TEXT_CONTENT = {
+    aini:   { text: '爱你',             fontSize: 160 },
+    xiexie: { text: '谢谢！',           fontSize: 140 },
+    zhuni:  { text: '祝你每天都快乐',   fontSize: 72 },
+  };
+
+  // ─────────────────────────────────────
+  // Enter / exit text mode
+  // ─────────────────────────────────────
+  function enterTextMode(mode) {
+    if (state.textMode === mode) return;
+    state.textMode = mode;
+    state.textTransition = 0;
+    state.textTimer = 0;
+  }
+
+  function exitTextMode() {
+    state.textMode = null;
+    state.textTransition = 1;
+    state.textTimer = 0;
+  }
+
+  // ─────────────────────────────────────
+  // Handle gesture transitions
+  // ─────────────────────────────────────
+  let lastGesture = 'none';
+  let gestureLockUntil = 0;
+  let lastOpennessForTarget = -1;
+  let lastHandXForTarget = -1;
+  let lastHandYForTarget = -1;
+
+  function handleGesture(gesture, now) {
+    if (now < gestureLockUntil && gesture !== 'none' && gesture !== 'fist' && gesture !== 'openPalm') {
+      return; // debounce lock for discrete gestures
     }
 
-    function updateExportButton() {
-        exportBtn.disabled = !sortedData.length || !targetCells.size;
-    }
+    // ── Continuous: fist detection & sequence ──
+    if (gesture === 'fist') {
+      // Reset timer on fresh fist entry
+      if (lastGesture !== 'fist') {
+        state.fistStartTime = now;
+        state.fistConfirmed = false;
+      }
+      const fistDuration = now - state.fistStartTime;
+      if (fistDuration >= FIST_HOLD_MS && !state.fistConfirmed) {
+        state.fistConfirmed = true;
+        state.fistConfirmedTime = now;
+        state.targetScale = 0.25;
+        state.targetOffsetX = 0;
+        state.targetOffsetY = 0;
+      }
+    } else if (state.fistConfirmed) {
+      // Was holding fist, now released — check for valid fist→open sequence
+      if (gesture === 'openPalm') {
+        const elapsed = now - state.fistConfirmedTime;
+        if (elapsed < TRANSITION_WINDOW_MS) {
+          state.fistOpenCounter++;
+          state.fistOpenLastTime = now;
+          state.sequenceActive = true;
 
-    document.getElementById('sourceBox').addEventListener('click', ()=> sourceFile.click());
-    document.getElementById('targetBox').addEventListener('click', ()=> targetFile.click());
-    document.getElementById('refBox').addEventListener('click', ()=> refFile.click());
-
-    sourceFile.addEventListener('change', e => handleDoc(e, 'source'));
-    targetFile.addEventListener('change', e => handleDoc(e, 'target'));
-    refFile.addEventListener('change', e => handleRefUpload(e));
-
-    function checkFileType(file, allowed) {
-        const ext = file.name.split('.').pop().toLowerCase();
-        if (!allowed.includes(ext)) {
-            toast(`请选择 ${allowed.join(' / ')} 文件，当前为 .${ext} 格式`);
-            return false;
+          if (state.fistOpenCounter === 1) {
+            state.targetScale = 2.2;
+            gestureLockUntil = now + 300;
+          } else if (state.fistOpenCounter >= 2) {
+            enterTextMode('zhuni');
+            state.fistOpenCounter = 0;
+            state.fistOpenLastTime = 0;
+            gestureLockUntil = now + TEXT_DISPLAY_MS;
+          }
         }
-        return true;
+      }
+      // Reset fist tracking when hand moves away from fist
+      state.fistStartTime = 0;
+      state.fistConfirmed = false;
     }
 
-    async function handleDoc(event, type) {
-        const file = event.target.files[0];
-        if (!file) return;
-        if (!checkFileType(file, ['docx'])) return;
-        toast('解析中...');
-        try {
-            const zip = await JSZip.loadAsync(file);
-            const xml = await zip.file('word/document.xml')?.async('string');
-            if (!xml) throw new Error('无 document.xml');
-            const tables = parseAllTables(xml);
-            if (type === 'source') {
-                sourceZip = zip; sourceXml = xml; sourceTables = tables; sourceName.textContent = file.name;
-                populateSelect(sourceTableSel, tables.length);
-                renderTable(sourcePreview, tables[0], 'source');
-                sourceCoordInput.value = '';
-            } else {
-                targetZip = zip; targetXml = xml; targetTables = tables; targetName.textContent = file.name;
-                populateSelect(targetTableSel, tables.length);
-                renderTable(targetPreview, tables[0], 'target');
-                targetCoordInput.value = '';
-            }
-            document.getElementById('previewCard').style.display = 'block';
-            document.getElementById('sortRefCard').style.display = 'block';
-            toast('解析完成');
-        } catch(e) { console.error(e); toast('解析失败'); }
-        event.target.value = '';
+    // Reset scale to follow hand if not in special mode
+    if (!state.textMode && !state.fistConfirmed) {
+      state.targetScale = 0.3 + state.opennessSmoothed * 1.7;
     }
 
-    function parseAllTables(xmlStr) {
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(xmlStr, 'text/xml');
-        const tbls = xmlDoc.getElementsByTagNameNS('*', 'tbl');
-        const tables = [];
-        for (let tbl of tbls) {
-            const rows = tbl.getElementsByTagNameNS('*', 'tr');
-            const table = [];
-            for (let row of rows) {
-                const cells = row.getElementsByTagNameNS('*', 'tc');
-                const rowData = [];
-                for (let cell of cells) {
-                    let text = '';
-                    const ps = cell.getElementsByTagNameNS('*', 'p');
-                    for (let p of ps) {
-                        const rs = p.getElementsByTagNameNS('*', 'r');
-                        for (let r of rs) {
-                            const t = r.getElementsByTagNameNS('*', 't')[0];
-                            if (t) text += t.textContent;
-                        }
-                    }
-                    rowData.push({ text: text.trim(), xmlCell: cell });
-                }
-                table.push(rowData);
-            }
-            tables.push({ rows: table });
+    // ── Discrete gestures ──
+    if (gesture === 'vsign' && lastGesture !== 'vsign') {
+      enterTextMode('aini');
+      gestureLockUntil = now + 500;
+    }
+    if (gesture === 'thumbsUp' && lastGesture !== 'thumbsUp') {
+      enterTextMode('xiexie');
+      gestureLockUntil = now + 500;
+    }
+    if (gesture === 'ok' && lastGesture !== 'ok') {
+      // Reset everything
+      resetAll();
+      gestureLockUntil = now + GESTURE_DEBOUNCE_MS;
+    }
+
+    // ── Release text gestures (only if not entering a new text mode) ──
+    const willEnterNewText = (
+      (gesture === 'vsign' && state.textMode !== 'aini') ||
+      (gesture === 'thumbsUp' && state.textMode !== 'xiexie')
+    );
+    if (state.textMode === 'aini' && gesture !== 'vsign' && !willEnterNewText) {
+      exitTextMode();
+    }
+    if (state.textMode === 'xiexie' && gesture !== 'thumbsUp' && !willEnterNewText) {
+      exitTextMode();
+    }
+
+    lastGesture = gesture;
+  }
+
+  function resetAll() {
+    exitTextMode();
+    state.textMode = null;
+    state.textTransition = 0;
+    state.targetScale = 1;
+    state.globalScale = 1;
+    state.targetOffsetX = 0;
+    state.targetOffsetY = 0;
+    state.fistOpenCounter = 0;
+    state.fistStartTime = 0;
+    state.fistConfirmed = false;
+    state.fistOpenLastTime = 0;
+    state.sequenceActive = false;
+  }
+
+  // ─────────────────────────────────────
+  // Flip detection
+  // ─────────────────────────────────────
+  function detectFlip(lm, handedness) {
+    if (!lm || state.flipCooldown > 0) return false;
+
+    // Use index MCP (5) vs pinky MCP (17) X difference, normalized by handedness
+    let metric = handedness === 'Right'
+      ? lm[5].x - lm[17].x
+      : lm[17].x - lm[5].x;
+
+    state.flipMetricHistory.push({ time: performance.now(), value: metric });
+    // Keep last 20 frames
+    if (state.flipMetricHistory.length > 20) state.flipMetricHistory.shift();
+    if (state.flipMetricHistory.length < 5) return false;
+
+    const recent = state.flipMetricHistory.slice(-5);
+    const old = state.flipMetricHistory.slice(0, 5);
+    const recentAvg = recent.reduce((s, v) => s + v.value, 0) / recent.length;
+    const oldAvg = old.reduce((s, v) => s + v.value, 0) / old.length;
+
+    const delta = Math.abs(recentAvg - oldAvg);
+    const signChange = (recentAvg > 0.01) !== (oldAvg > 0.01);
+
+    if (delta > 0.08 && signChange) {
+      state.flipCooldown = 60; // ~1 second at 60fps
+      return true;
+    }
+    return false;
+  }
+
+  // ─────────────────────────────────────
+  // Update UI
+  // ─────────────────────────────────────
+  function updateUI(gestureName) {
+    let label = '';
+    const theme = THEMES[state.themeIndex % THEMES.length];
+    const themeColor = theme.name === 'cyan' ? '#0ff' : theme.name === 'magenta' ? '#f0f' : '#fd0';
+
+    if (state.textMode === 'aini') label = '对勾 ✅';
+    else if (state.textMode === 'xiexie') label = '点赞 👍';
+    else if (state.textMode === 'zhuni') label = '✨ 祝你每天都快乐 ✨';
+    else if (state.fistOpenCounter >= 1 && !state.fistConfirmed && !state.textMode) label = '握拳→张开 ① ✓ 再来一次';
+    else if (state.fistConfirmed) label = '握拳 ✊';
+    else if (gestureName === 'openPalm') label = '五指张开 🖐';
+    else if (gestureName === 'vsign') label = '对勾 ✌️';
+    else if (gestureName === 'thumbsUp') label = '点赞 👍';
+    else if (gestureName === 'ok') label = 'OK 重置';
+    else if (!state.handDetected) label = '等待手势…';
+    else label = '移动手掌 ✨';
+
+    gestureLabel.textContent = label;
+    gestureLabel.style.color = themeColor;
+    gestureLabel.style.textShadow = `0 0 20px ${themeColor}, 0 0 40px ${themeColor}`;
+
+    const scalePercent = Math.round(state.globalScale * 100);
+    scaleIndicator.textContent = `缩放: ${scalePercent}%`;
+    scaleIndicator.style.borderColor = themeColor;
+    scaleIndicator.style.textShadow = `0 0 8px ${themeColor}`;
+  }
+
+  // ─────────────────────────────────────
+  // Main update loop
+  // ─────────────────────────────────────
+  function update(now) {
+    const dt = Math.min((now - state.lastTime) / 1000, 0.1);
+    state.lastTime = now;
+
+    // Decrease cooldowns
+    if (state.flipCooldown > 0) state.flipCooldown--;
+    if (gestureLockUntil > 0 && now > gestureLockUntil) gestureLockUntil = 0;
+
+    // Sequence timeout
+    if (state.fistOpenCounter > 0 && state.fistOpenLastTime > 0) {
+      if (now - state.fistOpenLastTime > SEQUENCE_TIMEOUT_MS) {
+        state.fistOpenCounter = 0;
+        state.fistOpenLastTime = 0;
+      }
+    }
+
+    // Smooth global scale & offset
+    state.globalScale = lerp(state.globalScale, state.targetScale, 0.08);
+    state.globalOffsetX = lerp(state.globalOffsetX, state.targetOffsetX, 0.1);
+    state.globalOffsetY = lerp(state.globalOffsetY, state.targetOffsetY, 0.1);
+
+    // Text mode timing — smooth exit for blessing text
+    if (state.textMode === 'zhuni') {
+      state.textTimer += dt;
+      if (state.textTimer > TEXT_DISPLAY_MS / 1000) {
+        exitTextMode();
+        state.fistOpenCounter = 0;
+        state.fistOpenLastTime = 0;
+      }
+    }
+
+    // Text transition — fast enter (0.3s) for snappy feedback, smooth exit (0.5s)
+    if (state.textMode && state.textTransition < 1) {
+      state.textTransition = Math.min(1, state.textTransition + dt / 0.3);
+    }
+    if (!state.textMode && state.textTransition > 0) {
+      state.textTransition = Math.max(0, state.textTransition - dt / 0.5);
+    }
+
+    // Breathing phase for text glow
+    const breathPulse = 1 + Math.sin(now * 0.003) * 0.05;
+
+    // Update particles — always floating, no text targets
+    const cx = W / 2 + state.globalOffsetX;
+    const cy = H / 2 + state.globalOffsetY;
+    const scale = state.globalScale * breathPulse;
+
+    for (const p of state.particles) {
+      const floatX = Math.sin(now * 0.001 * p.freq + p.phase) * p.amp;
+      const floatY = Math.cos(now * 0.0013 * p.freq + p.phase + 1) * p.amp;
+      const tx = (p.baseX - W / 2) * scale + cx + floatX;
+      const ty = (p.baseY - H / 2) * scale + cy + floatY;
+      p.x = lerp(p.x, tx, 0.04);
+      p.y = lerp(p.y, ty, 0.04);
+      p.vx *= 0.95;
+      p.vy *= 0.95;
+    }
+  }
+
+  // ─────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────
+  function drawBackground() {
+    // Deep space gradient
+    const grad = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.7);
+    grad.addColorStop(0, '#0a0a1a');
+    grad.addColorStop(0.5, '#050515');
+    grad.addColorStop(1, '#000005');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle star field (drawn once, could be cached)
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    const seed = 42;
+    for (let i = 0; i < effectiveStarCount; i++) {
+      const sx = ((i * 7919 + seed * 31) % W + W) % W;
+      const sy = ((i * 6271 + seed * 73) % H + H) % H;
+      const sr = 0.3 + ((i * 137) % 100) / 100 * 1.2;
+      ctx.beginPath();
+      ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawParticles(now) {
+    const inText = state.textMode && state.textTransition > 0.1;
+    const bgDim = inText ? (1 - state.textTransition * 0.45) : 1;
+    if (bgDim < 0.05) return;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const p of state.particles) {
+      const color = getThemeColor(p);
+      const s = p.size * bgDim;
+      // Glow
+      const gg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, s * p.glowSize * glowScale);
+      gg.addColorStop(0, color.hsla(color.a * 0.4));
+      gg.addColorStop(0.5, color.hsla(color.a * 0.12));
+      gg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, s * p.glowSize * glowScale, 0, Math.PI * 2);
+      ctx.fillStyle = gg;
+      ctx.fill();
+      // Core
+      const cg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, s);
+      cg.addColorStop(0, `rgba(255,255,255,${0.85 * bgDim})`);
+      cg.addColorStop(0.15, color.hsla(color.a * bgDim));
+      cg.addColorStop(0.5, color.hsla(color.a * 0.4 * bgDim));
+      cg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, s, 0, Math.PI * 2);
+      ctx.fillStyle = cg;
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawIndicatorRing(now) {
+    if (!state.handDetected) return;
+
+    const cx = W / 2 + state.globalOffsetX;
+    const cy = H / 2 + state.globalOffsetY;
+    const r = state.globalScale * Math.min(W, H) * 0.35;
+    const theme = THEMES[state.themeIndex % THEMES.length];
+    const hueColor = theme.name === 'cyan' ? '0,255,220' : theme.name === 'magenta' ? '255,0,255' : '255,210,0';
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+
+    // Outer ring
+    const pulse = 1 + Math.sin(now * 0.004) * 0.06;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * pulse, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(${hueColor},0.25)`;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = `rgba(${hueColor},0.4)`;
+    ctx.shadowBlur = 15;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Inner ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.7 * pulse, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(${hueColor},0.12)`;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([10, 20]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Center dot
+    const dotGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 6);
+    dotGrad.addColorStop(0, `rgba(${hueColor},0.7)`);
+    dotGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.beginPath();
+    ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+    ctx.fillStyle = dotGrad;
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawPreviewSkeleton() {
+    if (!state.landmarksSmoothed) return;
+    previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+
+    // Draw video frame (mirrored)
+    previewCtx.save();
+    previewCtx.translate(previewCanvas.width, 0);
+    previewCtx.scale(-1, 1);
+    try {
+      previewCtx.drawImage(videoEl, 0, 0, previewCanvas.width, previewCanvas.height);
+    } catch (e) { /* video not ready */ }
+    previewCtx.restore();
+
+    // Mirror landmarks for drawing
+    const mirrored = state.landmarksSmoothed.map(l => ({
+      x: (1 - l.x) * previewCanvas.width,
+      y: l.y * previewCanvas.height,
+    }));
+
+    // Draw connections using MediaPipe drawing utils (with fallback)
+    if (window.drawConnectors && window.HAND_CONNECTIONS) {
+      window.drawConnectors(previewCtx, mirrored, window.HAND_CONNECTIONS, {
+        color: '#00FFCC',
+        lineWidth: 1.5,
+      });
+      window.drawLandmarks(previewCtx, mirrored, {
+        color: '#FF00AA',
+        lineWidth: 1,
+        radius: 2.5,
+      });
+    } else {
+      // Fallback: manual skeleton drawing
+      drawSkeletonFallback(previewCtx, mirrored);
+    }
+  }
+
+  function drawSkeletonFallback(ctx, lm) {
+    const connections = [
+      [0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],
+      [5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],
+      [13,17],[17,18],[18,19],[19,20],[0,17]
+    ];
+    ctx.strokeStyle = '#00FFCC';
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.8;
+    connections.forEach(([a, b]) => {
+      ctx.beginPath();
+      ctx.moveTo(lm[a].x, lm[a].y);
+      ctx.lineTo(lm[b].x, lm[b].y);
+      ctx.stroke();
+    });
+    lm.forEach(p => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#FF00AA';
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  function render(now) {
+    ctx.clearRect(0, 0, W, H);
+    drawBackground();
+    drawIndicatorRing(now);
+    drawParticles(now);
+
+    // Direct text rendering — crisp, clear, no particle approximation
+    if (state.textMode && state.textTransition > 0.05) {
+      drawTextDirect(state.textMode, state.textTransition);
+    }
+
+    drawPreviewSkeleton();
+    updateUI(lastGesture);
+  }
+
+  // Render text directly with fillText — perfect clarity
+  function drawTextDirect(mode, alpha) {
+    const cfg = TEXT_CONTENT[mode];
+    if (!cfg) return;
+    const theme = THEMES[state.themeIndex % THEMES.length];
+    const hue = theme.baseHue;
+
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const fontSize = Math.min(cfg.fontSize, W * 0.13);
+    ctx.font = `bold ${fontSize}px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif`;
+
+    // Outer glow (text-shadow equivalent)
+    ctx.shadowColor = `hsla(${hue}, 100%, 70%, ${0.7 * alpha})`;
+    ctx.shadowBlur = 18 * alpha * shadowScale;
+    ctx.fillStyle = `hsla(${hue}, 100%, 85%, ${alpha})`;
+    ctx.fillText(cfg.text, W / 2, H / 2);
+    // Second pass for brighter glow
+    ctx.shadowBlur = 8 * alpha * shadowScale;
+    ctx.fillText(cfg.text, W / 2, H / 2);
+
+    // Core text — pure white for max readability
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'transparent';
+    ctx.fillStyle = `rgba(255,255,255,${0.95 * alpha})`;
+    ctx.fillText(cfg.text, W / 2, H / 2);
+
+    ctx.restore();
+  }
+
+  // ─────────────────────────────────────
+  // Animation loop
+  // ─────────────────────────────────────
+  function loop(now) {
+    update(now);
+    render(now);
+    requestAnimationFrame(loop);
+  }
+
+  // ─────────────────────────────────────
+  // MediaPipe Hands setup
+  // ─────────────────────────────────────
+  let handsInstance = null;
+
+  function onHandResults(results) {
+    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+      const lm = results.multiHandLandmarks[0];
+      state.landmarksRaw = lm;
+      state.handedness = results.multiHandedness[0]?.label || null;
+      state.handDetected = true;
+
+      // Smoothing: maintain history
+      state.landmarksHistory.push(lm);
+      if (state.landmarksHistory.length > SMOOTHING_FRAMES) {
+        state.landmarksHistory.shift();
+      }
+
+      // Compute smoothed landmarks
+      const smoothed = [];
+      const n = state.landmarksHistory.length;
+      for (let i = 0; i < 21; i++) {
+        let sx = 0, sy = 0, sz = 0;
+        for (let j = 0; j < n; j++) {
+          sx += state.landmarksHistory[j][i].x;
+          sy += state.landmarksHistory[j][i].y;
+          sz += (state.landmarksHistory[j][i].z || 0);
         }
-        return tables;
-    }
+        smoothed.push({ x: sx / n, y: sy / n, z: sz / n });
+      }
+      state.landmarksSmoothed = smoothed;
 
-    function populateSelect(sel, count) {
-        sel.innerHTML = '';
-        for (let i = 0; i < count; i++) sel.innerHTML += `<option value="${i}">表格${i+1}</option>`;
-    }
+      // Openness
+      const rawOpenness = calcOpenness(smoothed);
+      state.openness = rawOpenness;
+      state.opennessSmoothed = lerp(state.opennessSmoothed, rawOpenness, 0.3);
 
-    function colLetterToIndex(letter) {
-        let col = 0;
-        for (let i = 0; i < letter.length; i++) {
-            col = col * 26 + (letter.toUpperCase().charCodeAt(i) - 64);
+      // Hand center
+      const hcx = smoothed[9].x;
+      const hcy = smoothed[9].y;
+      state.handCenterX = hcx;
+      state.handCenterY = hcy;
+      state.handCenterSmoothedX = lerp(state.handCenterSmoothedX, hcx, 0.25);
+      state.handCenterSmoothedY = lerp(state.handCenterSmoothedY, hcy, 0.25);
+
+      // Map hand position to particle offset (only update on significant change)
+      const newOffsetX = (state.handCenterSmoothedX - 0.5) * W * 0.7;
+      const newOffsetY = (state.handCenterSmoothedY - 0.5) * H * 0.3;
+      if (Math.abs(newOffsetX - lastHandXForTarget) > W * 0.005 ||
+          Math.abs(newOffsetY - lastHandYForTarget) > H * 0.005) {
+        state.targetOffsetX = newOffsetX;
+        state.targetOffsetY = newOffsetY;
+        lastHandXForTarget = newOffsetX;
+        lastHandYForTarget = newOffsetY;
+      }
+
+      // Update target scale based on openness (if not in special mode, with threshold)
+      if (!state.textMode && !state.fistConfirmed) {
+        const newScale = 0.3 + state.opennessSmoothed * 1.7;
+        if (Math.abs(newScale - lastOpennessForTarget) > 0.02) {
+          state.targetScale = newScale;
+          lastOpennessForTarget = newScale;
         }
-        return col - 1;
+      }
+
+      // Gesture detection
+      const now = performance.now();
+      const gesture = detectGestures(smoothed);
+      handleGesture(gesture, now);
+
+      // Flip detection
+      if (state.flipCooldown <= 0 && detectFlip(smoothed, state.handedness)) {
+        state.themeIndex = (state.themeIndex + 1) % THEMES.length;
+        state.flipCooldown = 60;
+      }
+    } else {
+      state.handDetected = false;
+      state.landmarksRaw = null;
+      state.landmarksSmoothed = null;
+      state.landmarksHistory = [];
+      state.opennessSmoothed = lerp(state.opennessSmoothed, 0.5, 0.05);
+      if (!state.textMode) {
+        state.targetScale = 1;
+        state.targetOffsetX = 0;
+        state.targetOffsetY = 0;
+      }
+    }
+  }
+
+  async function initMediaPipe() {
+    const Hands = window.Hands;
+    if (!Hands) {
+      throw new Error('MediaPipe Hands not loaded');
     }
 
-    function parseCoordInput(inputStr, table) {
-        const result = new Set();
-        if (!inputStr.trim()) return result;
-        const rangeMatch = inputStr.match(/^([A-Z]+)(\d+)[:.]{1,2}([A-Z]+)(\d+)$/i);
-        if (rangeMatch) {
-            const colStart = colLetterToIndex(rangeMatch[1]);
-            const rowStart = parseInt(rangeMatch[2]) - 1;
-            const colEnd = colLetterToIndex(rangeMatch[3]);
-            const rowEnd = parseInt(rangeMatch[4]) - 1;
-            if (colStart === -1 || colEnd === -1 || isNaN(rowStart) || isNaN(rowEnd)) return result;
-            for (let r = Math.min(rowStart, rowEnd); r <= Math.max(rowStart, rowEnd); r++) {
-                for (let c = Math.min(colStart, colEnd); c <= Math.max(colStart, colEnd); c++) {
-                    if (r < table.rows.length && c < table.rows[r].length) result.add(`${r}-${c}`);
-                }
-            }
-            return result;
-        }
-        const parts = inputStr.split(/[,，]+/);
-        parts.forEach(part => {
-            part = part.trim().toUpperCase();
-            if (/^[A-Z]+\d+$/.test(part)) {
-                const col = colLetterToIndex(part.match(/^[A-Z]+/)[0]);
-                const row = parseInt(part.match(/\d+$/)[0]) - 1;
-                if (col !== -1 && !isNaN(row) && row < table.rows.length && col < table.rows[row].length) {
-                    result.add(`${row}-${col}`);
-                }
-            } else if (/^[A-Z]+$/.test(part)) {
-                const col = colLetterToIndex(part);
-                if (col !== -1) {
-                    for (let r = 0; r < table.rows.length; r++) {
-                        if (col < table.rows[r].length) result.add(`${r}-${col}`);
-                    }
-                }
-            }
-        });
-        return result;
-    }
-
-    function applyCoordSelection(type) {
-        const inputEl = type === 'source' ? sourceCoordInput : type === 'target' ? targetCoordInput : refCoordInput;
-        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
-        const tables = type === 'source' ? sourceTables : type === 'target' ? targetTables : refTables;
-        const index = type === 'source' ? srcIdx : type === 'target' ? tgtIdx : refIdx;
-        const wrapper = type === 'source' ? sourcePreview : type === 'target' ? targetPreview : refPreview;
-        if (!tables.length) return toast('请先上传文档');
-        const table = tables[index];
-        const newCells = parseCoordInput(inputEl.value, table);
-        if (newCells.size === 0) { toast('坐标格式无效或区域为空'); return; }
-        cells.clear();
-        newCells.forEach(key => cells.add(key));
-        highlightCells(wrapper, cells);
-        toast(`已选中 ${cells.size} 个单元格`);
-    }
-
-    sourceCoordBtn.addEventListener('click', () => applyCoordSelection('source'));
-    targetCoordBtn.addEventListener('click', () => applyCoordSelection('target'));
-    refCoordBtn.addEventListener('click', () => applyCoordSelection('ref'));
-    sourceCoordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') applyCoordSelection('source'); });
-    targetCoordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') applyCoordSelection('target'); });
-    refCoordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') applyCoordSelection('ref'); });
-
-    function renderTable(container, table, type) {
-        container.innerHTML = '';
-        const tbl = document.createElement('table');
-        tbl.className = 'table-preview';
-        const colCount = table.rows[0]?.length || 0;
-        const hRow = document.createElement('tr');
-        hRow.innerHTML = '<th></th>';
-        for (let j = 0; j < colCount; j++) {
-            const th = document.createElement('th');
-            th.textContent = String.fromCharCode(65 + j);
-            th.addEventListener('click', (e) => {
-                e.stopPropagation();
-                handleColumnClick(type, j);
-            });
-            hRow.appendChild(th);
-        }
-        tbl.appendChild(hRow);
-        for (let i = 0; i < table.rows.length; i++) {
-            const tr = document.createElement('tr');
-            const rh = document.createElement('th');
-            rh.className = 'row-header'; rh.textContent = i + 1;
-            tr.appendChild(rh);
-            for (let j = 0; j < table.rows[i].length; j++) {
-                const td = document.createElement('td');
-                td.textContent = table.rows[i][j].text;
-                td.dataset.row = i; td.dataset.col = j;
-                td.addEventListener('mousedown', (e) => startBoxSelect(e, type, container));
-                td.addEventListener('mousemove', (e) => updateBoxSelect(e, type));
-                td.addEventListener('touchstart', (e) => touchStartBox(e, type, container), {passive: false});
-                td.addEventListener('touchmove', (e) => touchMoveBox(e, type), {passive: false});
-                tr.appendChild(td);
-            }
-            tbl.appendChild(tr);
-        }
-        container.appendChild(tbl);
-        highlightCells(container, type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells);
-    }
-
-    // 列头点击：切换整列选中状态
-    function handleColumnClick(type, col) {
-        const wrapper = type === 'source' ? sourcePreview : type === 'target' ? targetPreview : refPreview;
-        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
-        const tables = type === 'source' ? sourceTables : type === 'target' ? targetTables : refTables;
-        const index = type === 'source' ? srcIdx : type === 'target' ? tgtIdx : refIdx;
-        const table = tables[index];
-        
-        // 检查该列是否全部选中
-        const allSelected = Array.from({length: table.rows.length}, (_, r) => `${r}-${col}`).every(key => cells.has(key));
-        if (allSelected) {
-            // 取消该列
-            for (let r = 0; r < table.rows.length; r++) cells.delete(`${r}-${col}`);
-        } else {
-            // 选中该列
-            for (let r = 0; r < table.rows.length; r++) if (col < table.rows[r].length) cells.add(`${r}-${col}`);
-        }
-        highlightCells(wrapper, cells);
-    }
-
-    // 单元格点击：切换单个单元格
-    function startBoxSelect(e, type, wrapper) {
-        if (!e.target.matches('td')) return;
-        e.preventDefault();
-        isSelecting = true;
-        currentType = type;
-        lastClientX = e.clientX;
-        lastClientY = e.clientY;
-        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
-        const row = +e.target.dataset.row, col = +e.target.dataset.col;
-        const key = `${row}-${col}`;
-        if (cells.has(key)) {
-            cells.delete(key);
-            touchDeleteMode = true;
-        } else {
-            cells.add(key);
-            touchDeleteMode = false;
-        }
-        highlightCells(wrapper, cells);
-    }
-
-    function updateBoxSelect(e, type) {
-        if (!isSelecting || currentType !== type || !e.target.matches('td')) return;
-        const deltaX = e.clientX - lastClientX;
-        const deltaY = e.clientY - lastClientY;
-        lastClientX = e.clientX;
-        lastClientY = e.clientY;
-        const wrapper = type === 'source' ? sourcePreview : type === 'target' ? targetPreview : refPreview;
-        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
-        const row = +e.target.dataset.row, col = +e.target.dataset.col;
-        const key = `${row}-${col}`;
-        if (touchDeleteMode) {
-            cells.delete(key);
-        } else {
-            if (deltaY > 0) cells.add(key);
-            else if (deltaY < 0) cells.delete(key);
-        }
-        if (deltaY > 0) wrapper.scrollTop += 8;
-        else if (deltaY < 0) wrapper.scrollTop -= 8;
-        if (deltaX > 0) wrapper.scrollLeft += 8;
-        else if (deltaX < 0) wrapper.scrollLeft -= 8;
-        highlightCells(wrapper, cells);
-    }
-
-    function touchStartBox(e, type, wrapper) {
-        e.preventDefault();
-        const touch = e.touches[0];
-        const target = document.elementFromPoint(touch.clientX, touch.clientY);
-        if (!target || !target.matches('td')) return;
-        isSelecting = true;
-        currentType = type;
-        lastClientX = touch.clientX;
-        lastClientY = touch.clientY;
-        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
-        const key = `${target.dataset.row}-${target.dataset.col}`;
-        if (cells.has(key)) {
-            cells.delete(key);
-            touchDeleteMode = true;
-        } else {
-            cells.add(key);
-            touchDeleteMode = false;
-        }
-        highlightCells(wrapper, cells);
-    }
-
-    function touchMoveBox(e, type) {
-        if (!isSelecting || currentType !== type) return;
-        e.preventDefault();
-        const touch = e.touches[0];
-        const deltaX = touch.clientX - lastClientX;
-        const deltaY = touch.clientY - lastClientY;
-        lastClientX = touch.clientX;
-        lastClientY = touch.clientY;
-        const target = document.elementFromPoint(touch.clientX, touch.clientY);
-        if (!target || !target.matches('td')) return;
-        const wrapper = type === 'source' ? sourcePreview : type === 'target' ? targetPreview : refPreview;
-        const cells = type === 'source' ? sourceCells : type === 'target' ? targetCells : refCells;
-        const key = `${target.dataset.row}-${target.dataset.col}`;
-        if (touchDeleteMode) {
-            cells.delete(key);
-        } else {
-            if (deltaY > 0) cells.add(key);
-            else if (deltaY < 0) cells.delete(key);
-        }
-        if (deltaY > 0) wrapper.scrollTop += 8;
-        else if (deltaY < 0) wrapper.scrollTop -= 8;
-        if (deltaX > 0) wrapper.scrollLeft += 8;
-        else if (deltaX < 0) wrapper.scrollLeft -= 8;
-        highlightCells(wrapper, cells);
-    }
-
-    window.addEventListener('mouseup', () => { isSelecting = false; touchDeleteMode = false; });
-    window.addEventListener('touchend', () => { isSelecting = false; touchDeleteMode = false; });
-
-    function highlightCells(wrapper, cells) {
-        wrapper.querySelectorAll('td').forEach(td => {
-            const key = `${td.dataset.row}-${td.dataset.col}`;
-            td.classList.toggle('selected', cells.has(key));
-        });
-    }
-
-    clearSelBtn.addEventListener('click', () => {
-        sourceCells.clear(); targetCells.clear(); refCells.clear();
-        [sourcePreview, targetPreview, refPreview].forEach(w => highlightCells(w, new Set()));
-        sourceCoordInput.value = ''; targetCoordInput.value = ''; refCoordInput.value = '';
+    handsInstance = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
     });
 
-    sourceTableSel.addEventListener('change', () => { srcIdx = +sourceTableSel.value; sourceCells.clear(); renderTable(sourcePreview, sourceTables[srcIdx], 'source'); sourceCoordInput.value = ''; });
-    targetTableSel.addEventListener('change', () => { tgtIdx = +targetTableSel.value; targetCells.clear(); renderTable(targetPreview, targetTables[tgtIdx], 'target'); targetCoordInput.value = ''; });
-
-    extractBtn.addEventListener('click', () => {
-        if (!sourceCells.size) return toast('请在源表格框选区域');
-        const table = sourceTables[srcIdx].rows;
-        extractedData = [];
-        const sortedKeys = [...sourceCells].map(k => k.split('-').map(Number)).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
-        for (let [r,c] of sortedKeys) {
-            if (r < table.length && c < table[r].length) {
-                const txt = table[r][c].text;
-                if (txt) extractedData.push(txt);
-            }
-        }
-        if (!extractedData.length) return toast('所选区域无文本');
-        originalData = [...extractedData];
-        sortedData = [...extractedData];
-        renderSortList();
-        document.getElementById('sortCard').style.display = 'block';
-        info.textContent = `已提取 ${extractedData.length} 条`;
-        updateExportButton();
+    handsInstance.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.5,
     });
 
-    function editItem(index) {
-        const oldValue = sortedData[index];
-        const newValue = prompt('修改数据项内容：', oldValue);
-        if (newValue !== null) {
-            sortedData[index] = newValue.trim();
-            renderSortList();
-            toast('已更新数据项');
-        }
-    }
+    handsInstance.onResults(onHandResults);
 
-    function renderSortList() {
-        sortListEl.innerHTML = '';
-        sortedData.forEach((item, idx) => {
-            const li = document.createElement('li');
-            li.className = 'sort-item';
-            if (item === '') li.classList.add('empty-slot');
-            li.draggable = true;
-            li.dataset.index = idx;
-            li.innerHTML = `
-                <span class="drag-handle">☰</span>
-                <span class="item-text" ondblclick="this.closest('.sort-item').querySelector('.edit-btn').click()">${item === '' ? '（空）' : item}</span>
-                <button class="edit-btn" data-index="${idx}">✏️ 编辑</button>
-            `;
-            li.querySelector('.edit-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                editItem(idx);
-            });
-            li.addEventListener('dragstart', handleDragStart);
-            li.addEventListener('dragover', e => e.preventDefault());
-            li.addEventListener('drop', handleDrop);
-            li.addEventListener('touchstart', handleTouchDragStart, {passive: false});
-            li.addEventListener('touchmove', handleTouchDragMove, {passive: false});
-            li.addEventListener('touchend', handleTouchDragEnd);
-            sortListEl.appendChild(li);
-        });
-        updateExportButton();
-    }
-
-    let dragSrcIndex = null;
-    function handleDragStart(e) { dragSrcIndex = +this.dataset.index; e.dataTransfer.effectAllowed = 'move'; }
-    function handleDrop(e) {
-        e.preventDefault();
-        const targetIndex = +this.dataset.index;
-        if (dragSrcIndex === null || targetIndex === dragSrcIndex) return;
-        const srcItem = sortedData[dragSrcIndex];
-        const targetItem = sortedData[targetIndex];
-        if (targetItem === '' && srcItem !== '') {
-            sortedData[targetIndex] = srcItem;
-            sortedData.splice(dragSrcIndex, 1);
-        } else {
-            [sortedData[dragSrcIndex], sortedData[targetIndex]] = [sortedData[targetIndex], sortedData[dragSrcIndex]];
-        }
-        renderSortList();
-        dragSrcIndex = null;
-    }
-
-    let touchDragItem = null, touchStartY = 0, touchPlaceholder = null, touchInitialIndex = -1;
-    function handleTouchDragStart(e) {
-        if (e.target.tagName === 'BUTTON') return;
-        touchDragItem = this;
-        touchInitialIndex = +touchDragItem.dataset.index;
-        const touch = e.touches[0];
-        touchStartY = touch.clientY;
-        touchDragItem.style.opacity = '0.6';
-        touchDragItem.style.background = '#e2e8f0';
-        touchPlaceholder = document.createElement('li');
-        touchPlaceholder.className = 'sort-item';
-        touchPlaceholder.style.height = touchDragItem.offsetHeight + 'px';
-        touchPlaceholder.style.background = '#e2e8f0';
-        sortListEl.insertBefore(touchPlaceholder, touchDragItem.nextSibling);
-        touchDragItem.style.position = 'absolute';
-        touchDragItem.style.zIndex = '10';
-        touchDragItem.style.width = sortListEl.offsetWidth - 20 + 'px';
-        document.body.style.userSelect = 'none';
-    }
-    function handleTouchDragMove(e) {
-        if (!touchDragItem) return;
-        e.preventDefault();
-        const touch = e.touches[0];
-        const diffY = touch.clientY - touchStartY;
-        touchDragItem.style.transform = `translateY(${diffY}px)`;
-        const children = [...sortListEl.children].filter(c => c !== touchDragItem);
-        let targetIdx = touchInitialIndex;
-        children.forEach((child, idx) => {
-            const rect = child.getBoundingClientRect();
-            if (touch.clientY > rect.top + child.offsetHeight / 2) targetIdx = idx + 1;
-        });
-        const targetChild = sortListEl.children[targetIdx];
-        sortListEl.insertBefore(touchPlaceholder, targetChild || null);
-    }
-    function handleTouchDragEnd() {
-        if (!touchDragItem) return;
-        touchDragItem.style.opacity = '1';
-        touchDragItem.style.position = '';
-        touchDragItem.style.zIndex = '';
-        touchDragItem.style.transform = '';
-        touchDragItem.style.width = '';
-        touchDragItem.style.background = '';
-        document.body.style.userSelect = '';
-        const newIndex = [...sortListEl.children].indexOf(touchPlaceholder);
-        if (newIndex !== -1 && newIndex !== touchInitialIndex) {
-            const moved = sortedData.splice(touchInitialIndex, 1)[0];
-            sortedData.splice(newIndex, 0, moved);
-        }
-        if (touchPlaceholder) { touchPlaceholder.remove(); touchPlaceholder = null; }
-        renderSortList();
-        touchDragItem = null;
-    }
-
-    async function handleRefUpload(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        const ext = file.name.split('.').pop().toLowerCase();
-        if (!['xlsx','docx'].includes(ext)) { toast('请选择 .xlsx 或 .docx 文件'); return; }
-        refName.textContent = file.name;
-        toast('解析中...');
-        try {
-            if (ext === 'xlsx') {
-                const buf = await file.arrayBuffer();
-                const wb = XLSX.read(buf, {type:'array'});
-                const ws = wb.Sheets[wb.SheetNames[0]];
-                const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-                refTables = [{ rows: rows.map(row => row.map(t => ({ text: String(t).trim() }))) }];
-            } else if (ext === 'docx') {
-                const zip = await JSZip.loadAsync(file);
-                const xml = await zip.file('word/document.xml')?.async('string');
-                refTables = parseAllTables(xml);
-            }
-            document.getElementById('refPreviewArea').style.display = 'block';
-            populateSelect(refTableSel, refTables.length);
-            renderTable(refPreview, refTables[0], 'ref');
-            refCoordInput.value = '';
-            toast('依据文档解析完成');
-        } catch(e) { toast('解析失败'); }
-        event.target.value = '';
-    }
-
-    refTableSel.addEventListener('change', () => { refIdx = +refTableSel.value; refCells.clear(); renderTable(refPreview, refTables[refIdx], 'ref'); refCoordInput.value = ''; });
-
-    function getRefPairs() {
-        const refTable = refTables[refIdx].rows;
-        const sortedKeys = [...refCells].map(k => k.split('-').map(Number)).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
-        const rowMap = new Map();
-        for (let [r,c] of sortedKeys) {
-            if (!rowMap.has(r)) rowMap.set(r, []);
-            rowMap.get(r).push(c);
-        }
-        const pairs = [];
-        for (let [r, cols] of rowMap) {
-            cols.sort((a,b)=>a-b);
-            if (cols.length >= 2) {
-                const c1 = cols[0], c2 = cols[1];
-                if (r < refTable.length && c1 < refTable[r].length && c2 < refTable[r].length) {
-                    const seq = parseFloat(refTable[r][c1].text);
-                    const name = refTable[r][c2].text;
-                    if (!isNaN(seq) && name) pairs.push({ seq, name });
-                }
-            }
-        }
-        return pairs;
-    }
-
-    applySortBtn.addEventListener('click', performExactSort);
-
-    function performExactSort() {
-        if (!refCells.size) return toast('请框选依据区域');
-        if (!sortedData.length) return toast('请先提取源数据');
-        const pairs = getRefPairs();
-        if (!pairs.length) return toast('所选区域无法构成两列');
-        pairs.sort((a,b) => a.seq - b.seq);
-        const matched = [], unmatched = [], used = new Set();
-        pairs.forEach(p => {
-            const idx = sortedData.indexOf(p.name);
-            if (idx !== -1 && !used.has(p.name)) { matched.push(p.name); used.add(p.name); }
-            else matched.push('');
-        });
-        sortedData.forEach(item => { if (!used.has(item)) unmatched.push(item); });
-        sortedData = [...matched, ...unmatched];
-        renderSortList();
-        const emptyCount = matched.filter(i => i === '').length;
-        refStatus.textContent = `精确匹配：留出 ${emptyCount} 个空位，${unmatched.length} 条未匹配排至末尾`;
-    }
-
-    function performFuzzySort(threshold) {
-        if (!refCells.size) return toast('请框选依据区域');
-        if (!sortedData.length) return toast('请先提取源数据');
-        const pairs = getRefPairs();
-        if (!pairs.length) return toast('所选区域无法构成两列');
-        pairs.sort((a,b) => a.seq - b.seq);
-        const available = [...sortedData], used = new Set(), matched = [], unmatched = [];
-        pairs.forEach(p => {
-            let bestIdx = -1, bestSim = 0;
-            for (let i = 0; i < available.length; i++) {
-                if (used.has(i)) continue;
-                const sim = similarity(available[i], p.name);
-                if (sim > bestSim) { bestSim = sim; bestIdx = i; }
-            }
-            if (bestIdx !== -1 && bestSim >= threshold) { matched.push(available[bestIdx]); used.add(bestIdx); }
-            else matched.push('');
-        });
-        available.forEach((item, i) => { if (!used.has(i)) unmatched.push(item); });
-        sortedData = [...matched, ...unmatched];
-        renderSortList();
-        const emptyCount = matched.filter(i => i === '').length;
-        const percent = Math.round(threshold * 100);
-        refStatus.textContent = `模糊匹配≥${percent}%：留出 ${emptyCount} 个空位，${unmatched.length} 条未匹配排至末尾`;
-        toast(`模糊匹配≥${percent}%完成：${matched.length - emptyCount} 条匹配`);
-    }
-
-    fuzzySort90Btn.addEventListener('click', () => performFuzzySort(0.9));
-    fuzzySort75Btn.addEventListener('click', () => performFuzzySort(0.75));
-    fuzzyCustomBtn.addEventListener('click', () => {
-        let val = parseInt(fuzzyThreshold.value, 10);
-        if (isNaN(val) || val < 20 || val > 95) { toast('相似度阈值需在20-95之间'); return; }
-        performFuzzySort(val / 100);
+    // Start camera
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        width: { ideal: 480 },
+        height: { ideal: 360 },
+        facingMode: 'user',
+        frameRate: { ideal: 30 },
+      },
     });
+    videoEl.srcObject = stream;
+    await videoEl.play();
 
-    function similarity(a, b) {
-        if (!a && !b) return 1;
-        if (!a || !b) return 0;
-        const maxLen = Math.max(a.length, b.length);
-        if (maxLen === 0) return 1;
-        const dist = editDistance(a, b);
-        return 1 - dist / maxLen;
+    // Process frames
+    async function processFrame() {
+      if (handsInstance && videoEl.readyState >= 2) {
+        await handsInstance.send({ image: videoEl });
+      }
+      requestAnimationFrame(() => processFrame());
     }
+    processFrame();
+  }
 
-    function editDistance(s1, s2) {
-        s1 = s1.toLowerCase(); s2 = s2.toLowerCase();
-        const len1 = s1.length, len2 = s2.length;
-        const matrix = [];
-        for (let i = 0; i <= len1; i++) matrix[i] = [i];
-        for (let j = 0; j <= len2; j++) matrix[0][j] = j;
-        for (let i = 1; i <= len1; i++) {
-            for (let j = 1; j <= len2; j++) {
-                if (s1.charAt(i - 1) === s2.charAt(j - 1)) {
-                    matrix[i][j] = matrix[i - 1][j - 1];
-                } else {
-                    matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
-                }
-            }
-        }
-        return matrix[len1][len2];
+  // ─────────────────────────────────────
+  // Guide close button
+  // ─────────────────────────────────────
+  guideCloseBtn.addEventListener('click', () => {
+    guideBox.style.opacity = '0';
+    setTimeout(() => { guideBox.style.display = 'none'; }, 800);
+  });
+
+  // Hide guide after 8 seconds
+  setTimeout(() => {
+    if (guideBox.style.display !== 'none') {
+      guideBox.style.opacity = '0';
+      setTimeout(() => { guideBox.style.display = 'none'; }, 800);
     }
+  }, 10000);
 
-    resetBtn.addEventListener('click', () => { sortedData = [...originalData]; renderSortList(); });
+  // ─────────────────────────────────────
+  // Startup
+  // ─────────────────────────────────────
+  async function start() {
+    try {
+      await initMediaPipe();
+      loadingOverlay.style.opacity = '0';
+      setTimeout(() => { loadingOverlay.style.display = 'none'; }, 500);
+      requestAnimationFrame(loop);
+    } catch (err) {
+      console.error('Init error:', err);
+      loadingOverlay.querySelector('.text').textContent =
+        '摄像头访问失败，请允许摄像头权限后刷新页面';
+      loadingOverlay.querySelector('.spinner').style.display = 'none';
+    }
+  }
 
-    exportBtn.addEventListener('click', async () => {
-        if (!targetZip || !targetXml) return toast('缺失目标文档');
-        if (!sortedData.length) return toast('无排序数据');
-        if (!targetCells.size) return toast('请框选目标替换区域');
-
-        const finalData = [...sortedData];
-        const table = targetTables[tgtIdx];
-        const sortedKeys = [...targetCells].map(k => k.split('-').map(Number)).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
-
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(targetXml, 'text/xml');
-        const tbls = xmlDoc.getElementsByTagNameNS('*', 'tbl');
-        const tbl = tbls[tgtIdx];
-        const trs = tbl.getElementsByTagNameNS('*', 'tr');
-        let idx = 0;
-        for (let [r,c] of sortedKeys) {
-            if (idx >= finalData.length) break;
-            if (r < trs.length) {
-                const tcs = trs[r].getElementsByTagNameNS('*', 'tc');
-                if (c < tcs.length) setCellText(tcs[c], finalData[idx++]);
-            }
-        }
-
-        const serializer = new XMLSerializer();
-        const newXml = serializer.serializeToString(xmlDoc);
-        targetZip.file('word/document.xml', newXml);
-        const blob = await targetZip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
-        const fileName = (exportFileName.value.trim() || '排序替换结果') + '.docx';
-        const file = new File([blob], fileName, {type: blob.type});
-
-        const ua = navigator.userAgent.toLowerCase();
-        const isWxOrQQ = /micromessenger|qq\//i.test(ua);
-        if (isWxOrQQ) {
-            toast('微信/QQ内可能无法下载，请点击右上角“在浏览器打开”', 3000);
-            downloadFile(blob, fileName);
+  // Wait for MediaPipe scripts to load
+  function waitForMediaPipe() {
+    return new Promise((resolve) => {
+      const check = () => {
+        if (window.Hands) {
+          resolve();
         } else {
-            if (navigator.share && navigator.canShare && navigator.canShare({files: [file]})) {
-                try {
-                    await navigator.share({ title: fileName, files: [file] });
-                    toast('分享面板已打开');
-                } catch (err) {
-                    if (err.name !== 'AbortError') downloadFile(blob, fileName);
-                }
-            } else {
-                downloadFile(blob, fileName);
-            }
+          setTimeout(check, 100);
         }
+      };
+      check();
     });
+  }
 
-    function downloadFile(blob, fileName) {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        toast('下载已开始，如未成功请使用浏览器打开本页面');
-    }
-
-    function setCellText(cellXml, newText) {
-        const ps = cellXml.getElementsByTagNameNS('*', 'p');
-        if (ps.length) {
-            const p = ps[0];
-            while (p.firstChild) p.removeChild(p.firstChild);
-            const doc = p.ownerDocument;
-            const r = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'r');
-            const t = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 't');
-            t.setAttribute('xml:space','preserve'); t.textContent = newText;
-            r.appendChild(t); p.appendChild(r);
-            for (let i=1; i<ps.length; i++) ps[i].parentNode?.removeChild(ps[i]);
-        } else {
-            const doc = cellXml.ownerDocument;
-            const p = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'p');
-            const r = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'r');
-            const t = doc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 't');
-            t.textContent = newText; r.appendChild(t); p.appendChild(r); cellXml.appendChild(p);
-        }
-    }
-
-    (function() {
-        const ua = navigator.userAgent.toLowerCase();
-        const isWxOrQQ = /micromessenger|qq\//i.test(ua);
-        document.getElementById('warnWx').style.display = isWxOrQQ ? 'block' : 'none';
-    })();
+  waitForMediaPipe().then(() => {
+    start();
+  }).catch((err) => {
+    console.error('MediaPipe load error:', err);
+    loadingOverlay.querySelector('.text').textContent =
+      '模型加载失败，请检查网络连接后刷新页面';
+    loadingOverlay.querySelector('.spinner').style.display = 'none';
+  });
 })();
 </script>
 </body>
