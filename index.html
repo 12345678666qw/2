@@ -23,10 +23,11 @@
   #video {
     position: fixed;
     top: 0; left: 0;
-    width: 1px; height: 1px;
-    opacity: 0.01;
+    width: 320px; height: 240px;
+    opacity: 0.001;
     pointer-events: none;
     z-index: -1;
+    object-fit: cover;
   }
   #previewContainer {
     position: fixed;
@@ -947,7 +948,25 @@
     }
 
     drawPreviewSkeleton();
+    drawDiagnostics();
     updateUI(lastGesture);
+  }
+
+  // Diagnostic overlay showing data link status
+  function drawDiagnostics() {
+    const x = 10, y = H - 80;
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(x, y, 180, 72);
+    ctx.fillStyle = '#0f0';
+    ctx.font = '11px monospace';
+    ctx.fillText('VID: ' + diagVidW + 'x' + diagVidH + (diagVidPlaying ? ' ▶' : ' ⏸'), x + 6, y + 16);
+    ctx.fillText('SENT: ' + diagSent + ' | RECV: ' + diagRecv, x + 6, y + 32);
+    ctx.fillText('HANDS: ' + diagHands + (state.handDetected ? ' ✓' : ' ✗'), x + 6, y + 48);
+    ctx.fillStyle = '#aaa';
+    ctx.fillText('Conf: 0.4/0.3  Model: lite', x + 6, y + 64);
+    ctx.restore();
   }
 
   // Render text directly with fillText — perfect clarity
@@ -994,9 +1013,14 @@
   // MediaPipe Hands setup
   // ─────────────────────────────────────
   let handsInstance = null;
+  // Diagnostics
+  let diagSent = 0, diagRecv = 0, diagHands = 0;
+  let diagVidW = 0, diagVidH = 0, diagVidPlaying = false;
 
   function onHandResults(results) {
+    diagRecv++;
     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+      diagHands++;
       const lm = results.multiHandLandmarks[0];
       state.landmarksRaw = lm;
       state.handedness = results.multiHandedness[0]?.label || null;
@@ -1181,7 +1205,14 @@
 
     setStatus('[2/5] 摄像头已连接，初始化模型…', true);
     videoEl.srcObject = stream;
-    try { await videoEl.play(); } catch (e) { /* continue */ }
+    try { await videoEl.play(); } catch (e) { setStatus('⚠ 视频播放失败: ' + e.message, false); }
+    // Wait for video metadata to load (critical on mobile)
+    if (videoEl.readyState < 2) {
+      await new Promise(r => { videoEl.onloadedmetadata = r; setTimeout(r, 2000); });
+    }
+    diagVidW = videoEl.videoWidth;
+    diagVidH = videoEl.videoHeight;
+    diagVidPlaying = !videoEl.paused;
 
     setStatus('[3/5] 加载 MediaPipe Hands…', true);
     if (!window.Hands) {
@@ -1191,20 +1222,74 @@
       return;
     }
 
+    // Model files from CDN (keeps HTML shareable as single file)
+    const CDN_BASES = [
+      'https://cdn.jsdelivr.net/npm/@mediapipe/hands/',
+      'https://unpkg.com/@mediapipe/hands/',
+    ];
+    let cdnTried = 0;
     const hands = new window.Hands({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+      locateFile: (file) => {
+        const url = CDN_BASES[cdnTried] + file;
+        console.log('MediaPipe loading:', url);
+        return url;
+      },
     });
 
     setStatus('[4/5] 配置手势识别…', true);
     hands.setOptions({
       maxNumHands: 1,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.5,
+      modelComplexity: 0,
+      minDetectionConfidence: 0.3,
+      minTrackingConfidence: 0.2,
     });
 
     hands.onResults(onHandResults);
     handsInstance = hands;
+
+    // Wait for model to load (10s timeout)
+    setStatus('[4/5] 加载模型…', true);
+    let modelLoaded = false;
+    modelLoaded = await new Promise((resolve) => {
+      let count = 0;
+      const check = () => {
+        count++;
+        if (diagRecv > 0) { resolve(true); return; }
+        if (count > 120) { resolve(false); return; } // 12 second timeout
+        if (videoEl.readyState >= 2) {
+          hands.send({ image: videoEl }).catch(() => {});
+        }
+        setTimeout(check, 100);
+      };
+      check();
+    });
+
+    if (!modelLoaded) {
+      // Retry with unpkg CDN
+      cdnTried = 1;
+      setStatus('[4/5] 切换CDN重试…', true);
+      diagRecv = 0;
+      modelLoaded = await new Promise((resolve) => {
+        let count = 0;
+        const check = () => {
+          count++;
+          if (diagRecv > 0) { resolve(true); return; }
+          if (count > 120) { resolve(false); return; }
+          if (videoEl.readyState >= 2) {
+            hands.send({ image: videoEl }).catch(() => {});
+          }
+          setTimeout(check, 100);
+        };
+        check();
+      });
+    }
+
+    if (!modelLoaded) {
+      setStatus('❌ 模型加载失败\n请检查网络后刷新', false);
+      startBtn.disabled = false;
+      startBtn.textContent = '重试';
+      return;
+    }
 
     setStatus('[5/5] 启动完成！', false);
     setTimeout(() => {
@@ -1217,6 +1302,7 @@
     // Frame processing loop
     (function processFrame() {
       if (handsInstance && videoEl.readyState >= 2) {
+        diagSent++;
         handsInstance.send({ image: videoEl });
       }
       requestAnimationFrame(processFrame);
