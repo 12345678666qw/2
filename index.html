@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -192,9 +193,9 @@
   <div id="guideBox">
     <div class="title">手势交互说明</div>
     <div class="item"><span class="gesture-icon">🖐</span> 张合手掌 — 粒子缩放 & 移动</div>
-    <div class="item"><span class="gesture-icon">✌️</span> 对勾/剪刀手 — 显示"爱你"</div>
-    <div class="item"><span class="gesture-icon">👍</span> 点赞 — 显示"谢谢！"</div>
-    <div class="item"><span class="gesture-icon">✊</span> 握拳→张开×2 — 触发祝福文字</div>
+    <div class="item"><span class="gesture-icon">✌️</span> 对勾/剪刀手 — 显示 "LOVE"</div>
+    <div class="item"><span class="gesture-icon">👍</span> 点赞 — 显示 "THANKS!"</div>
+    <div class="item"><span class="gesture-icon">👍</span> 点赞×2 — 触发祝福文字</div>
     <div class="item"><span class="gesture-icon">👌</span> OK手势 — 重置粒子</div>
     <div class="item"><span class="gesture-icon">🔄</span> 快速翻手 — 切换主题色</div>
     <button id="guideCloseBtn">开始体验</button>
@@ -239,16 +240,14 @@
 
   function updateMobileConfig(w) {
     isMobile = w < 768;
-    effectiveParticleCount = isMobile ? 200 : PARTICLE_COUNT;
+    effectiveParticleCount = isMobile ? 250 : 500;
     effectiveStarCount = isMobile ? 80 : 200;
     glowScale = isMobile ? 0.6 : 1;
     shadowScale = isMobile ? 0.55 : 1;
   }
   const SMOOTHING_FRAMES = 5;
   const GESTURE_DEBOUNCE_MS = 200;
-  const FIST_HOLD_MS = 300;
-  const SEQUENCE_TIMEOUT_MS = 5000;
-  const TRANSITION_WINDOW_MS = 500;
+  const THUMBSUP_TIMEOUT_MS = 3000;
   const TEXT_DISPLAY_MS = 3000;
 
   // ─────────────────────────────────────
@@ -274,15 +273,9 @@
     gestureDebounceEnd: 0,
     gestureStableFrames: 0,
 
-    // Fist detection
-    fistStartTime: 0,
-    fistConfirmed: false,
-    fistConfirmedTime: 0,
-
-    // Fist→Open sequence
-    fistOpenCounter: 0,
-    fistOpenLastTime: 0,
-    sequenceActive: false,
+    // Thumbs up counter (2nd triggers blessing)
+    thumbsUpCount: 0,
+    thumbsUpLastTime: 0,
 
     // Finger states
     fingersExtended: [false, false, false, false, false],
@@ -368,6 +361,7 @@
         freq: 0.2 + Math.random() * 0.8,
         amp: 5 + Math.random() * 40,
         glowSize: 2 + Math.random() * 6,
+        isText: false,
       });
     }
     return particles;
@@ -497,27 +491,14 @@
     );
     if (isVSign) return 'vsign';
 
-    // ── Hand orientation: knuckle line angle ──
-    // Horizontal (< 35°) = back of hand up → 握拳
-    // Vertical (> 55°) = back of hand sideways → 点赞 candidate
-    const dxKn = lm[17].x - lm[5].x;
-    const dyKn = lm[17].y - lm[5].y;
-    const knuckleDeg = Math.abs(Math.atan2(dyKn, dxKn) * 180 / Math.PI);
-
-    // ── Fist: curled hand, knuckles horizontal (back of hand up) ──
-    if (openness < 0.2 && curlCount >= 4 && knuckleDeg < 35) return 'fist';
-
-    // ── Thumbs up: curled hand, knuckles vertical (back of hand sideways), thumb up ──
+    // ── Thumbs up: thumb extended + pointing up, others curled ──
     const thumbUp = isThumbUp(lm) && fingers[0];
     const othersAllCurled = curled[1] && curled[2] && curled[3] && curled[4];
-    if (thumbUp && othersAllCurled && knuckleDeg > 55) return 'thumbsUp';
+    if (thumbUp && othersAllCurled) return 'thumbsUp';
 
     // ── OK gesture ──
     const thumbIdxClose = dist3d(lm[4], lm[8]) < 0.06;
     if (thumbIdxClose && fingers[2] && fingers[3] && fingers[4] && !fingers[1]) return 'ok';
-
-    // ── Open palm ──
-    if (openness > 0.75 && extCount >= 4) return 'openPalm';
 
     return 'none';
   }
@@ -526,10 +507,81 @@
   // Text content registry
   // ─────────────────────────────────────
   const TEXT_CONTENT = {
-    aini:   { text: '爱你',             fontSize: 160 },
-    xiexie: { text: '谢谢！',           fontSize: 140 },
-    zhuni:  { text: '祝你每天都快乐',   fontSize: 72 },
+    aini:   { text: 'LOVE',             fontSize: 360 },
+    xiexie: { text: 'THANKS!',          fontSize: 300 },
+    zhuni:  { text: 'HAVE A NICE DAY',  fontSize: 90 },
   };
+
+  // ─────────────────────────────────────
+  // Text target calculation — 300px+ font, binary threshold, dense grid
+  // ─────────────────────────────────────
+  const TEXT_STEP = 2;        // 2px spacing on offscreen canvas
+
+  function calcTextTargets(text, fontSize, maxPoints) {
+    // Max-resolution offscreen canvas
+    const c = document.createElement('canvas');
+    c.width = 2400; c.height = 800;
+    const cx = c.getContext('2d');
+    cx.imageSmoothingEnabled = false;
+    cx.fillStyle = '#000';
+    cx.fillRect(0, 0, c.width, c.height);
+    cx.fillStyle = '#fff';
+    const fs = Math.max(fontSize, 300);
+    cx.font = `bold ${fs}px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif`;
+    cx.textAlign = 'center';
+    cx.textBaseline = 'middle';
+    // Heavy multi-offset draw for bold strokes (8 passes)
+    const cx0 = c.width / 2, cy0 = c.height / 2;
+    const offsets = [[0,0],[2,0],[-2,0],[0,2],[0,-2],[1,1],[-1,1],[1,-1]];
+    offsets.forEach(([ox, oy]) => cx.fillText(text, cx0 + ox, cy0 + oy));
+
+    const img = cx.getImageData(0, 0, c.width, c.height);
+    const pts = [];
+    const step = TEXT_STEP;
+    // Scan at TEXT_STEP density — no gaps between particles
+    for (let y = 0; y < c.height; y += step) {
+      for (let x = 0; x < c.width; x += step) {
+        // Strict binary: only fully-on pixels, reject all gray
+        if (img.data[(y * c.width + x) * 4] > 200) {
+          pts.push({
+            x: Math.round((x / c.width - 0.5) * W * 0.88 + W / 2),
+            y: Math.round((y / c.height - 0.5) * H * 0.6 + H / 2),
+          });
+        }
+      }
+    }
+
+    if (pts.length === 0) return [];
+
+    // Uniform stride sampling — evenly spaced, no gaps or clusters
+    if (pts.length > maxPoints) {
+      const stride = Math.floor(pts.length / maxPoints);
+      const uniform = [];
+      for (let i = 0; i < pts.length && uniform.length < maxPoints; i += stride) {
+        uniform.push(pts[i]);
+      }
+      return uniform;
+    }
+    return pts;
+  }
+
+  function assignTextTargets(text, fontSize) {
+    const MAX = effectiveParticleCount; // use all available particles
+    const targets = calcTextTargets(text, fontSize, MAX);
+    for (let i = 0; i < state.particles.length; i++) {
+      if (i < targets.length) {
+        state.particles[i].tx = targets[i].x;
+        state.particles[i].ty = targets[i].y;
+        state.particles[i].isText = true;
+      } else {
+        // Extra particles → random text pixel positions (stay in text area)
+        const t = targets[i % targets.length];
+        state.particles[i].tx = t.x;
+        state.particles[i].ty = t.y;
+        state.particles[i].isText = true;
+      }
+    }
+  }
 
   // ─────────────────────────────────────
   // Enter / exit text mode
@@ -539,12 +591,19 @@
     state.textMode = mode;
     state.textTransition = 0;
     state.textTimer = 0;
+    const cfg = TEXT_CONTENT[mode];
+    if (cfg) assignTextTargets(cfg.text, cfg.fontSize);
   }
 
   function exitTextMode() {
     state.textMode = null;
     state.textTransition = 1;
     state.textTimer = 0;
+    for (const p of state.particles) {
+      p.tx = p.baseX;
+      p.ty = p.baseY;
+      p.isText = false;
+    }
   }
 
   // ─────────────────────────────────────
@@ -557,71 +616,44 @@
   let lastHandYForTarget = -1;
 
   function handleGesture(gesture, now) {
-    if (now < gestureLockUntil && gesture !== 'none' && gesture !== 'fist' && gesture !== 'openPalm') {
+    if (now < gestureLockUntil && gesture !== 'none') {
       return; // debounce lock for discrete gestures
     }
 
-    // ── Continuous: fist detection & sequence ──
-    if (gesture === 'fist') {
-      // Reset timer on fresh fist entry
-      if (lastGesture !== 'fist') {
-        state.fistStartTime = now;
-        state.fistConfirmed = false;
-      }
-      const fistDuration = now - state.fistStartTime;
-      if (fistDuration >= FIST_HOLD_MS && !state.fistConfirmed) {
-        state.fistConfirmed = true;
-        state.fistConfirmedTime = now;
-        state.targetScale = 0.25;
-        state.targetOffsetX = 0;
-        state.targetOffsetY = 0;
-      }
-    } else if (state.fistConfirmed) {
-      // Was holding fist, now released — check for valid fist→open sequence
-      if (gesture === 'openPalm') {
-        const elapsed = now - state.fistConfirmedTime;
-        if (elapsed < TRANSITION_WINDOW_MS) {
-          state.fistOpenCounter++;
-          state.fistOpenLastTime = now;
-          state.sequenceActive = true;
-
-          if (state.fistOpenCounter === 1) {
-            state.targetScale = 2.2;
-            gestureLockUntil = now + 300;
-          } else if (state.fistOpenCounter >= 2) {
-            enterTextMode('zhuni');
-            state.fistOpenCounter = 0;
-            state.fistOpenLastTime = 0;
-            gestureLockUntil = now + TEXT_DISPLAY_MS;
-          }
-        }
-      }
-      // Reset fist tracking when hand moves away from fist
-      state.fistStartTime = 0;
-      state.fistConfirmed = false;
-    }
-
     // Reset scale to follow hand if not in special mode
-    if (!state.textMode && !state.fistConfirmed) {
+    if (!state.textMode) {
       state.targetScale = 0.3 + state.opennessSmoothed * 1.7;
     }
 
-    // ── Discrete gestures ──
+    // ── Thumbs up counter: 1st→THANKS!, 2nd→HAVE A NICE DAY ──
+    if (gesture === 'thumbsUp' && lastGesture !== 'thumbsUp') {
+      state.thumbsUpCount++;
+      state.thumbsUpLastTime = now;
+
+      if (state.thumbsUpCount === 1) {
+        enterTextMode('xiexie');
+      } else if (state.thumbsUpCount >= 2) {
+        enterTextMode('zhuni');
+        state.thumbsUpCount = 0;
+        state.thumbsUpLastTime = 0;
+        gestureLockUntil = now + TEXT_DISPLAY_MS;
+      }
+      gestureLockUntil = Math.max(gestureLockUntil, now + 500);
+    }
+
+    // ── V-sign ──
     if (gesture === 'vsign' && lastGesture !== 'vsign') {
       enterTextMode('aini');
       gestureLockUntil = now + 500;
     }
-    if (gesture === 'thumbsUp' && lastGesture !== 'thumbsUp') {
-      enterTextMode('xiexie');
-      gestureLockUntil = now + 500;
-    }
+
+    // ── OK resets everything ──
     if (gesture === 'ok' && lastGesture !== 'ok') {
-      // Reset everything
       resetAll();
       gestureLockUntil = now + GESTURE_DEBOUNCE_MS;
     }
 
-    // ── Release text gestures (only if not entering a new text mode) ──
+    // ── Release text gestures ──
     const willEnterNewText = (
       (gesture === 'vsign' && state.textMode !== 'aini') ||
       (gesture === 'thumbsUp' && state.textMode !== 'xiexie')
@@ -644,11 +676,8 @@
     state.globalScale = 1;
     state.targetOffsetX = 0;
     state.targetOffsetY = 0;
-    state.fistOpenCounter = 0;
-    state.fistStartTime = 0;
-    state.fistConfirmed = false;
-    state.fistOpenLastTime = 0;
-    state.sequenceActive = false;
+    state.thumbsUpCount = 0;
+    state.thumbsUpLastTime = 0;
   }
 
   // ─────────────────────────────────────
@@ -690,12 +719,10 @@
     const theme = THEMES[state.themeIndex % THEMES.length];
     const themeColor = theme.name === 'cyan' ? '#0ff' : theme.name === 'magenta' ? '#f0f' : '#fd0';
 
-    if (state.textMode === 'aini') label = '对勾 ✅';
+    if (state.textMode === 'aini') label = '对勾 ✌️';
     else if (state.textMode === 'xiexie') label = '点赞 👍';
-    else if (state.textMode === 'zhuni') label = '✨ 祝你每天都快乐 ✨';
-    else if (state.fistOpenCounter >= 1 && !state.fistConfirmed && !state.textMode) label = '握拳→张开 ① ✓ 再来一次';
-    else if (state.fistConfirmed) label = '握拳 ✊';
-    else if (gestureName === 'openPalm') label = '五指张开 🖐';
+    else if (state.textMode === 'zhuni') label = '✨ HAVE A NICE DAY ✨';
+    else if (state.thumbsUpCount === 1 && !state.textMode) label = '点赞 ① ✓ 再来一次';
     else if (gestureName === 'vsign') label = '对勾 ✌️';
     else if (gestureName === 'thumbsUp') label = '点赞 👍';
     else if (gestureName === 'ok') label = 'OK 重置';
@@ -723,11 +750,11 @@
     if (state.flipCooldown > 0) state.flipCooldown--;
     if (gestureLockUntil > 0 && now > gestureLockUntil) gestureLockUntil = 0;
 
-    // Sequence timeout
-    if (state.fistOpenCounter > 0 && state.fistOpenLastTime > 0) {
-      if (now - state.fistOpenLastTime > SEQUENCE_TIMEOUT_MS) {
-        state.fistOpenCounter = 0;
-        state.fistOpenLastTime = 0;
+    // Thumbs up sequence timeout
+    if (state.thumbsUpCount > 0 && state.thumbsUpLastTime > 0) {
+      if (now - state.thumbsUpLastTime > THUMBSUP_TIMEOUT_MS) {
+        state.thumbsUpCount = 0;
+        state.thumbsUpLastTime = 0;
       }
     }
 
@@ -741,8 +768,8 @@
       state.textTimer += dt;
       if (state.textTimer > TEXT_DISPLAY_MS / 1000) {
         exitTextMode();
-        state.fistOpenCounter = 0;
-        state.fistOpenLastTime = 0;
+        state.thumbsUpCount = 0;
+        state.thumbsUpLastTime = 0;
       }
     }
 
@@ -762,15 +789,25 @@
     const cy = H / 2 + state.globalOffsetY;
     const scale = state.globalScale * breathPulse;
 
+    const inText = state.textMode && state.textTransition > 0.01;
     for (const p of state.particles) {
-      const floatX = Math.sin(now * 0.001 * p.freq + p.phase) * p.amp;
-      const floatY = Math.cos(now * 0.0013 * p.freq + p.phase + 1) * p.amp;
-      const tx = (p.baseX - W / 2) * scale + cx + floatX;
-      const ty = (p.baseY - H / 2) * scale + cy + floatY;
-      p.x = lerp(p.x, tx, 0.04);
-      p.y = lerp(p.y, ty, 0.04);
-      p.vx *= 0.95;
-      p.vy *= 0.95;
+      if (inText && p.isText) {
+        // Quick fly to integer target, then lock
+        const speed = 0.2 * state.textTransition;
+        p.x = lerp(p.x, p.tx, speed);
+        p.y = lerp(p.y, p.ty, speed);
+        if (state.textTransition > 0.85) { p.x = p.tx; p.y = p.ty; }
+        p.vx = 0; p.vy = 0;
+      } else {
+        const floatX = Math.sin(now * 0.001 * p.freq + p.phase) * p.amp;
+        const floatY = Math.cos(now * 0.0013 * p.freq + p.phase + 1) * p.amp;
+        const tx = (p.baseX - W / 2) * scale + cx + floatX;
+        const ty = (p.baseY - H / 2) * scale + cy + floatY;
+        p.x = lerp(p.x, tx, 0.04);
+        p.y = lerp(p.y, ty, 0.04);
+        p.vx *= 0.95;
+        p.vy *= 0.95;
+      }
     }
   }
 
@@ -801,35 +838,95 @@
 
   function drawParticles(now) {
     const inText = state.textMode && state.textTransition > 0.1;
-    const bgDim = inText ? (1 - state.textTransition * 0.45) : 1;
-    if (bgDim < 0.05) return;
+    const alpha = state.textTransition;
+    const theme = THEMES[state.themeIndex % THEMES.length];
+    const bgDim = inText ? (1 - alpha * 0.45) : 1;
 
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    for (const p of state.particles) {
-      const color = getThemeColor(p);
-      const s = p.size * bgDim;
-      // Glow
-      const gg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, s * p.glowSize * glowScale);
-      gg.addColorStop(0, color.hsla(color.a * 0.4));
-      gg.addColorStop(0.5, color.hsla(color.a * 0.12));
-      gg.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, s * p.glowSize * glowScale, 0, Math.PI * 2);
-      ctx.fillStyle = gg;
-      ctx.fill();
-      // Core
-      const cg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, s);
-      cg.addColorStop(0, `rgba(255,255,255,${0.85 * bgDim})`);
-      cg.addColorStop(0.15, color.hsla(color.a * bgDim));
-      cg.addColorStop(0.5, color.hsla(color.a * 0.4 * bgDim));
-      cg.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, s, 0, Math.PI * 2);
-      ctx.fillStyle = cg;
-      ctx.fill();
+    // ── Pass 1: Floating particles (with glow) ──
+    if (bgDim > 0.03) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const p of state.particles) {
+        if (inText && p.isText) continue; // skip text particles here
+        const color = getThemeColor(p);
+        const s = p.size * bgDim;
+        const gg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, s * p.glowSize * glowScale);
+        gg.addColorStop(0, color.hsla(color.a * 0.4));
+        gg.addColorStop(0.5, color.hsla(color.a * 0.12));
+        gg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.beginPath(); ctx.arc(p.x, p.y, s * p.glowSize * glowScale, 0, Math.PI * 2);
+        ctx.fillStyle = gg; ctx.fill();
+        const cg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, s);
+        cg.addColorStop(0, `rgba(255,255,255,${0.85 * bgDim})`);
+        cg.addColorStop(0.15, color.hsla(color.a * bgDim));
+        cg.addColorStop(0.5, color.hsla(color.a * 0.4 * bgDim));
+        cg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.beginPath(); ctx.arc(p.x, p.y, s, 0, Math.PI * 2);
+        ctx.fillStyle = cg; ctx.fill();
+      }
+      ctx.restore();
     }
-    ctx.restore();
+
+    // ── Pass 2: Text particles — 3-layer glow + sharp white core ──
+    if (inText) {
+      const hue = theme.baseHue;
+
+      // Layer 0: Wide soft glow — creates the "trail" aura
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.imageSmoothingEnabled = false;
+      for (const p of state.particles) {
+        if (!p.isText) continue;
+        if (alpha < 0.08) continue;
+        const ix = Math.round(p.x);
+        const iy = Math.round(p.y);
+        ctx.fillStyle = `hsla(${hue}, 100%, 60%, ${0.15 * alpha})`;
+        ctx.fillRect(ix - 8, iy - 8, 16, 16);
+      }
+      ctx.restore();
+
+      // Layer 1: Mid glow ring
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.imageSmoothingEnabled = false;
+      for (const p of state.particles) {
+        if (!p.isText) continue;
+        if (alpha < 0.1) continue;
+        const ix = Math.round(p.x);
+        const iy = Math.round(p.y);
+        ctx.fillStyle = `hsla(${hue}, 100%, 75%, ${0.3 * alpha})`;
+        ctx.fillRect(ix - 5, iy - 5, 10, 10);
+      }
+      ctx.restore();
+
+      // Layer 2: Tight bright glow
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.imageSmoothingEnabled = false;
+      for (const p of state.particles) {
+        if (!p.isText) continue;
+        if (alpha < 0.12) continue;
+        const ix = Math.round(p.x);
+        const iy = Math.round(p.y);
+        ctx.fillStyle = `hsla(${hue}, 100%, 90%, ${0.45 * alpha})`;
+        ctx.fillRect(ix - 3, iy - 3, 6, 6);
+      }
+      ctx.restore();
+
+      // Core layer: pure white sharp square
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.imageSmoothingEnabled = false;
+      for (const p of state.particles) {
+        if (!p.isText) continue;
+        if (alpha < 0.15) continue;
+        const ix = Math.round(p.x);
+        const iy = Math.round(p.y);
+        ctx.fillStyle = `rgba(255,255,255,${0.98 * alpha})`;
+        ctx.fillRect(ix - 1.5, iy - 1.5, 3, 3);
+      }
+      ctx.restore();
+    }
   }
 
   function drawIndicatorRing(now) {
@@ -942,11 +1039,6 @@
     drawIndicatorRing(now);
     drawParticles(now);
 
-    // Direct text rendering — crisp, clear, no particle approximation
-    if (state.textMode && state.textTransition > 0.05) {
-      drawTextDirect(state.textMode, state.textTransition);
-    }
-
     drawPreviewSkeleton();
     drawDiagnostics();
     updateUI(lastGesture);
@@ -964,39 +1056,7 @@
     ctx.fillText('VID: ' + diagVidW + 'x' + diagVidH + (diagVidPlaying ? ' ▶' : ' ⏸'), x + 6, y + 16);
     ctx.fillText('SENT: ' + diagSent + ' | RECV: ' + diagRecv, x + 6, y + 32);
     ctx.fillText('HANDS: ' + diagHands + (state.handDetected ? ' ✓' : ' ✗'), x + 6, y + 48);
-    ctx.fillStyle = '#aaa';
-    ctx.fillText('Conf: 0.4/0.3  Model: lite', x + 6, y + 64);
-    ctx.restore();
-  }
-
-  // Render text directly with fillText — perfect clarity
-  function drawTextDirect(mode, alpha) {
-    const cfg = TEXT_CONTENT[mode];
-    if (!cfg) return;
-    const theme = THEMES[state.themeIndex % THEMES.length];
-    const hue = theme.baseHue;
-
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const fontSize = Math.min(cfg.fontSize, W * 0.13);
-    ctx.font = `bold ${fontSize}px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif`;
-
-    // Outer glow (text-shadow equivalent)
-    ctx.shadowColor = `hsla(${hue}, 100%, 70%, ${0.7 * alpha})`;
-    ctx.shadowBlur = 18 * alpha * shadowScale;
-    ctx.fillStyle = `hsla(${hue}, 100%, 85%, ${alpha})`;
-    ctx.fillText(cfg.text, W / 2, H / 2);
-    // Second pass for brighter glow
-    ctx.shadowBlur = 8 * alpha * shadowScale;
-    ctx.fillText(cfg.text, W / 2, H / 2);
-
-    // Core text — pure white for max readability
-    ctx.shadowBlur = 0;
-    ctx.shadowColor = 'transparent';
-    ctx.fillStyle = `rgba(255,255,255,${0.95 * alpha})`;
-    ctx.fillText(cfg.text, W / 2, H / 2);
-
+    ctx.fillText('PTS: ' + state.particles.filter(p => p.isText).length, x + 6, y + 64);
     ctx.restore();
   }
 
@@ -1071,7 +1131,7 @@
       }
 
       // Update target scale based on openness (if not in special mode, with threshold)
-      if (!state.textMode && !state.fistConfirmed) {
+      if (!state.textMode) {
         const newScale = 0.3 + state.opennessSmoothed * 1.7;
         if (Math.abs(newScale - lastOpennessForTarget) > 0.02) {
           state.targetScale = newScale;
