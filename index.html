@@ -1109,9 +1109,16 @@
     }
   }
 
-  // Step 0: Check secure context immediately
+  // Step 0: Check secure context + block startup if invalid
+  const isWeChat = /micromessenger/i.test(navigator.userAgent);
+  const isQQ = /qq\//i.test(navigator.userAgent) && !/micromessenger/i.test(navigator.userAgent);
+  const isInApp = isWeChat || isQQ;
+
   if (!window.isSecureContext) {
-    setStatus('⚠ 安全上下文检测失败！\n请通过 HTTPS 或 localhost 打开此页面，\n不要直接用 file:// 打开文件。', false);
+    setStatus('⚠ 安全上下文检测失败\n请通过 HTTPS 或 localhost 访问', false);
+    startBtn.style.display = 'none';
+  } else if (isInApp) {
+    setStatus('⚠ 检测到微信/QQ内置浏览器\n摄像头功能受限，请在菜单中选择\n"在浏览器中打开"\n使用 Safari 或 Chrome 访问', false);
     startBtn.style.display = 'none';
   }
 
@@ -1119,9 +1126,16 @@
     startBtn.disabled = true;
     startBtn.textContent = '启动中…';
 
-    // Pre-check: does this browser even support camera?
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setStatus('❌ 当前浏览器不支持摄像头\n请使用 Chrome 或 Safari 打开', false);
+    // Polyfill legacy API
+    if (!navigator.mediaDevices) navigator.mediaDevices = {};
+    if (!navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices.getUserMedia =
+        navigator.webkitGetUserMedia ||
+        navigator.mozGetUserMedia ||
+        navigator.msGetUserMedia;
+    }
+    if (!navigator.mediaDevices.getUserMedia) {
+      setStatus('❌ 浏览器不支持摄像头\n微信/QQ 内打开？请用系统浏览器访问', false);
       startBtn.disabled = false;
       startBtn.textContent = '重试';
       return;
@@ -1209,26 +1223,29 @@
     })();
   }
 
-  startBtn.addEventListener('click', startCamera);
-  startBtn.addEventListener('touchend', (e) => { e.preventDefault(); startCamera(); });
+  // Only wire up button and load MediaPipe if context is valid
+  if (window.isSecureContext && !isInApp) {
+    startBtn.addEventListener('click', startCamera);
+    startBtn.addEventListener('touchend', (e) => { e.preventDefault(); startCamera(); });
 
-  // Wait for MediaPipe CDN
-  (function waitForMediaPipe() {
-    let tries = 0;
-    const check = () => {
-      tries++;
-      if (window.Hands) {
-        setStatus('模型就绪，点击开始', false);
-        startBtn.style.display = 'inline-block';
-      } else if (tries > 150) { // 15 second timeout
-        setStatus('❌ 模型加载超时\n请检查网络后刷新', false);
-      } else {
-        setStatus('加载模型中… (' + Math.floor(tries / 10) + 's)', true);
-        setTimeout(check, 100);
-      }
-    };
-    check();
-  })();
+    // Wait for MediaPipe CDN
+    (function waitForMediaPipe() {
+      let tries = 0;
+      const check = () => {
+        tries++;
+        if (window.Hands) {
+          setStatus('模型就绪，点击开始', false);
+          startBtn.style.display = 'inline-block';
+        } else if (tries > 150) {
+          setStatus('❌ 模型加载超时\n请检查网络后刷新', false);
+        } else {
+          setStatus('加载模型中… (' + Math.floor(tries / 10) + 's)', true);
+          setTimeout(check, 100);
+        }
+      };
+      check();
+    })();
+  }
 })();
 </script>
 </body>
